@@ -271,3 +271,25 @@ test('正文业务错误原样抛出且不会尝试其他内容适配器', async
   const chapter = { v: 1, kind: 'chapter', bookId: 'BOOK_ID', itemId: 'ITEM_ID', source: 'SYNTHETIC_SOURCE', tab: '小说' };
   assert.throws(() => loaded.api.content.load(loaded.context, hexBody(chapter)), /今日次数已达上限/);
 });
+
+test('登录 UI 从共享配置生成，Cookie 状态不写入共享缓存', async () => {
+  const cache = makeCache();
+  const opened = [];
+  const removed = [];
+  const java = {
+    ...makeJava(),
+    getCookie(host) { return String(host).includes('v10.czyl.cf') ? 'SESSION_COOKIE=<redacted>' : ''; },
+    startBrowser(url, title) { opened.push([String(url), String(title)]); },
+  };
+  const cookie = { getCookie() { return ''; }, removeCookie(host) { removed.push(String(host)); } };
+  const loaded = await loadRuntime(['config.js', 'state.js', 'transport.js', 'auth.js'], { cache, cookie, java });
+  const ui = JSON.parse(loaded.api.auth.ui(loaded.context));
+  assert.match(ui[0].name, /检测到登录 Cookie/);
+  loaded.api.auth.toggle(loaded.context, 'syncBookshelf');
+  assert.equal(loaded.api.config.read(loaded.context).syncBookshelf, true);
+  loaded.api.auth.openLogin(loaded.context);
+  assert.equal(opened[0][0], 'https://v10.czyl.cf/login');
+  loaded.api.auth.logout(loaded.context);
+  assert.equal(removed.length, 6);
+  assert.doesNotMatch([...cache.values.values()].join('\n'), /SESSION_COOKIE|token|authorization/i);
+});
