@@ -4,9 +4,12 @@
  */
 
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
+import { promisify } from 'node:util';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
@@ -15,6 +18,8 @@ const sourceRoot = path.resolve(testDir, '..', 'wsl-premium-aggregate');
 const fixtureRoot = path.join(sourceRoot, 'protocol', 'fixtures');
 const runtimeRoot = path.join(sourceRoot, 'runtime');
 const outputFile = path.resolve(testDir, '..', 'wsl-premium-aggregate.json');
+const execFileAsync = promisify(execFile);
+const buildFile = path.join(sourceRoot, 'build.mjs');
 
 async function jsonFile(file) {
   return JSON.parse(await readFile(file, 'utf8'));
@@ -335,4 +340,48 @@ test('评论读取映射用户、图片、计数和游标，不配置已关闭�
   assert.equal(loaded.api.review.total(loaded.context, body), 1);
   assert.equal(loaded.api.review.hasMore(loaded.context, body), false);
   assert.equal(loaded.api.review.reply, undefined);
+});
+
+test('构建器生成四个唯一原生媒体书源且连续构建字节一致', async () => {
+  await execFileAsync(process.execPath, [buildFile]);
+  const first = await readFile(outputFile);
+  await execFileAsync(process.execPath, [buildFile]);
+  const second = await readFile(outputFile);
+  assert.equal(createHash('sha256').update(first).digest('hex'), createHash('sha256').update(second).digest('hex'));
+
+  const sources = JSON.parse(second.toString('utf8'));
+  assert.equal(sources.length, 4);
+  assert.deepEqual(sources.map((item) => item.bookSourceType), [0, 1, 2, 4]);
+  assert.equal(new Set(sources.map((item) => item.bookSourceUrl)).size, 4);
+  assert.ok(sources.every((item) => item.bookSourceGroup === 'WSL·精品聚合'));
+  assert.ok(sources.every((item) => item.enabledCookieJar && !item.enableDangerousApi));
+  assert.ok(sources.every((item) => item.jsLib.includes('Author: WSL')));
+  assert.ok(sources.every((item) => item.ruleReview.voteUpRule === undefined));
+  assert.doesNotMatch(second.toString('utf8'), /SESSION_COOKIE|reader@example\.invalid|SYNTHETIC_PARAGRAPH/i);
+
+  const shared = vm.createContext({ JSON, decodeURIComponent, encodeURIComponent });
+  vm.runInContext(sources[0].jsLib, shared, { filename: 'generated-jsLib.js' });
+  const runtimeContext = shared.WSLPA.ctx(
+    makeJava(), { getKey() { return sources[0].bookSourceUrl; }, getLoginInfoMap() { return null; } },
+    makeCache(), { removeCookie() {} },
+  );
+  assert.equal(shared.WSLPA.config.media(runtimeContext), '小说');
+  const stateUrl = shared.WSLPA.state.toDataUri(runtimeContext, {
+    v: 1, kind: 'book', bookId: 'BOOK_ID', source: 'SYNTHETIC_SOURCE', tab: '小说',
+  });
+  assert.equal(shared.WSLPA.state.fromDataUri(runtimeContext, stateUrl).bookId, 'BOOK_ID');
+});
+
+test('所有新增脚本署名 WSL，Rhino 运行时不含现代语法', async () => {
+  const scriptFiles = [
+    path.join(sourceRoot, 'build.mjs'), path.join(sourceRoot, 'protocol', 'capture.mjs'),
+    ...(await readdir(runtimeRoot)).filter((name) => name.endsWith('.js')).map((name) => path.join(runtimeRoot, name)),
+  ];
+  for (const file of scriptFiles) {
+    const text = await readFile(file, 'utf8');
+    assert.match(text.slice(0, 240), /Author:\s*WSL/, file);
+    if (file.endsWith('.js')) {
+      assert.doesNotMatch(text, /\?\.|\?\?|=>|\bconst\b|\blet\b|`/, file);
+    }
+  }
 });

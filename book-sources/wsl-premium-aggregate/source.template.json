@@ -1,0 +1,94 @@
+{
+  "common": {
+    "bookSourceComment": "独立实现的多媒体聚合书源，依赖示例书源当前使用的第三方服务器。账号态写接口仅在脱敏协议登记为已识别后启用。",
+    "bookSourceGroup": "WSL·精品聚合",
+    "enabled": true,
+    "enabledExplore": true,
+    "enabledReview": true,
+    "enabledCookieJar": true,
+    "enableDangerousApi": false,
+    "concurrentRate": "1/1000",
+    "header": "{\"User-Agent\":\"Mozilla/5.0 (Linux; Android 13; Legado WSL Source) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36\",\"Accept\":\"application/json,text/html;q=0.9,*/*;q=0.8\"}",
+    "loginUi": "@js:return WSLPA.auth.ui(WSLPA.ctx(java, source, cache, cookie));",
+    "loginCheckJs": null,
+    "respondTime": 180000,
+    "weight": 0,
+    "lastUpdateTime": 1785772800000,
+    "variableComment": "在登录面板统一设置节点、发现频道、书架同步、评论和明文末级节点。",
+    "exploreUrl": "@js:return WSLPA.explore.kinds(WSLPA.ctx(java, source, cache, cookie));",
+    "searchUrl": "@js:return WSLPA.search.url(WSLPA.ctx(java, source, cache, cookie), key, page);",
+    "ruleSearch": {
+      "checkKeyWord": "剑来",
+      "hasMoreRule": "WSLPA.search.hasMore(WSLPA.ctx(java, source, cache, cookie), result);",
+      "bookList": "<js>WSLPA.search.list(WSLPA.ctx(java, source, cache, cookie), result);</js>",
+      "name": "<js>result.name;</js>",
+      "author": "<js>result.author;</js>",
+      "intro": "<js>result.intro;</js>",
+      "kind": "<js>result.kind;</js>",
+      "lastChapter": "<js>result.lastChapter;</js>",
+      "updateTime": "<js>result.updateTime;</js>",
+      "bookUrl": "<js>result.bookUrl;</js>",
+      "coverUrl": "<js>result.coverUrl;</js>",
+      "wordCount": "<js>result.wordCount;</js>"
+    },
+    "ruleExplore": {
+      "hasMoreRule": "WSLPA.explore.hasMore(WSLPA.ctx(java, source, cache, cookie), result);",
+      "bookList": "<js>WSLPA.explore.list(WSLPA.ctx(java, source, cache, cookie), result);</js>",
+      "name": "<js>result.name;</js>",
+      "author": "<js>result.author;</js>",
+      "intro": "<js>result.intro;</js>",
+      "kind": "<js>result.kind;</js>",
+      "lastChapter": "<js>result.lastChapter;</js>",
+      "updateTime": "<js>result.updateTime;</js>",
+      "bookUrl": "<js>result.bookUrl;</js>",
+      "coverUrl": "<js>result.coverUrl;</js>",
+      "wordCount": "<js>result.wordCount;</js>"
+    },
+    "ruleBookInfo": {
+      "init": "<js>WSLPA.detail.load(WSLPA.ctx(java, source, cache, cookie), result);</js>",
+      "name": "<js>WSLPA.detail.field(result, 'name');</js>",
+      "author": "<js>WSLPA.detail.field(result, 'author');</js>",
+      "intro": "<js>WSLPA.detail.field(result, 'intro');</js>",
+      "kind": "<js>WSLPA.detail.field(result, 'kind');</js>",
+      "lastChapter": "<js>WSLPA.detail.field(result, 'lastChapter');</js>",
+      "updateTime": "<js>WSLPA.detail.field(result, 'updateTime');</js>",
+      "coverUrl": "<js>WSLPA.detail.field(result, 'coverUrl');</js>",
+      "tocUrl": "<js>WSLPA.detail.field(result, 'tocUrl');</js>",
+      "wordCount": "<js>WSLPA.detail.field(result, 'wordCount');</js>"
+    },
+    "ruleToc": {
+      "chapterList": "<js>WSLPA.catalog.list(WSLPA.ctx(java, source, cache, cookie), result);</js>",
+      "chapterName": "<js>result.title;</js>",
+      "chapterUrl": "<js>result.chapterUrl;</js>",
+      "isVolume": "<js>result.isVolume;</js>",
+      "isVip": "<js>result.isVip;</js>",
+      "isPay": "<js>result.isPay;</js>",
+      "updateTime": "<js>result.updateTime;</js>"
+    },
+    "ruleContent": {
+      "content": "<js>WSLPA.content.load(WSLPA.ctx(java, source, cache, cookie), result);</js>",
+      "imageStyle": "FULL"
+    },
+    "ruleReview": {
+      "reviewUrl": "@js:return WSLPA.review.url(WSLPA.ctx(java, source, cache, cookie), book, chapter, paragraphIndex, page);",
+      "reviewList": "<js>WSLPA.review.list(WSLPA.ctx(java, source, cache, cookie), result);</js>",
+      "reviewIdRule": "<js>result.reviewId;</js>",
+      "avatarRule": "<js>result.avatar;</js>",
+      "nameRule": "<js>result.name;</js>",
+      "contentRule": "<js>result.content;</js>",
+      "postTimeRule": "<js>result.postTime;</js>",
+      "extraRule": "<js>result.extra;</js>",
+      "imagesRule": "<js>result.images;</js>",
+      "voteUpCountRule": "<js>result.voteUpCount;</js>",
+      "replyCountRule": "<js>result.replyCount;</js>",
+      "totalCountRule": "<js>WSLPA.review.total(WSLPA.ctx(java, source, cache, cookie), result);</js>",
+      "hasMoreRule": "<js>WSLPA.review.hasMore(WSLPA.ctx(java, source, cache, cookie), result);</js>"
+    }
+  },
+  "variants": [
+    {"bookSourceName":"WSL·精品聚合·小说","bookSourceType":0,"bookSourceUrl":"https://www.qidian.com/#wsl-premium-aggregate-novel","customOrder":0,"exploreStyle":0},
+    {"bookSourceName":"WSL·精品聚合·听书","bookSourceType":1,"bookSourceUrl":"https://www.qidian.com/#wsl-premium-aggregate-audio","customOrder":1,"exploreStyle":0},
+    {"bookSourceName":"WSL·精品聚合·漫画","bookSourceType":2,"bookSourceUrl":"https://www.qidian.com/#wsl-premium-aggregate-image","customOrder":2,"exploreStyle":3},
+    {"bookSourceName":"WSL·精品聚合·短剧","bookSourceType":4,"bookSourceUrl":"https://www.qidian.com/#wsl-premium-aggregate-video","customOrder":3,"exploreStyle":18}
+  ]
+}
