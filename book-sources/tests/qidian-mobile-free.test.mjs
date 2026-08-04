@@ -173,7 +173,7 @@ test('起点官方免费书源满足静态契约和实时四段链路', async (t
 
   await t.test('正文执行规则只放行明确免费状态，并对结构变体失败关闭', () => {
     const syntheticContent = '<p>synthetic public content</p>';
-    const freeCases = [0, '0'];
+    const freeCases = [0];
     for (const vipStatus of freeCases) {
       const { output, messages } = runContentRule(source.ruleContent.content, { vipStatus, content: syntheticContent });
       assert.equal(output, syntheticContent, `vipStatus=${JSON.stringify(vipStatus)} 应返回正文`);
@@ -183,6 +183,9 @@ test('起点官方免费书源满足静态契约和实时四段链路', async (t
     const blockedCases = [
       { label: 'vipStatus=1,isBuy=0', chapterInfo: { vipStatus: 1, isBuy: 0, content: syntheticContent } },
       { label: 'vipStatus=1,isBuy=1', chapterInfo: { vipStatus: 1, isBuy: 1, content: syntheticContent } },
+      { label: 'vipStatus="0"', chapterInfo: { vipStatus: '0', content: syntheticContent } },
+      { label: 'vipStatus="00"', chapterInfo: { vipStatus: '00', content: syntheticContent } },
+      { label: 'vipStatus="free"', chapterInfo: { vipStatus: 'free', content: syntheticContent } },
       { label: 'vipStatus="1"', chapterInfo: { vipStatus: '1', content: syntheticContent } },
       { label: 'missing vipStatus', chapterInfo: { content: syntheticContent } },
       { label: 'vipStatus=null', chapterInfo: { vipStatus: null, content: syntheticContent } },
