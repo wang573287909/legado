@@ -103,8 +103,10 @@ test('起点官方免费书源满足静态契约和实时四段链路', async (t
   const headers = JSON.parse(source.header);
 
   await t.test('静态配置不依赖凭据或第三方聚合服务', () => {
+    const { bookUrlPattern, ...navigableSource } = source;
     assert.equal(source.bookSourceName, '起点中文·官方免费');
     assert.equal(source.bookSourceUrl, 'https://m.qidian.com');
+    assert.equal(bookUrlPattern, '^https://m\\.qidian\\.com/book/\\d+/?$');
     assert.equal(source.bookSourceType, 0);
     assert.equal(source.enabled, true);
     assert.equal(source.enabledExplore, false);
@@ -124,7 +126,8 @@ test('起点官方免费书源满足静态契约和实时四段链路', async (t
       Object.keys(headers).every((name) => !sensitiveHeaderName.test(name)),
       '请求头不得包含 Cookie、授权、API Key 或令牌类字段',
     );
-    const absoluteUrls = collectAbsoluteHttpUrls(source);
+    // 重要逻辑：bookUrlPattern 是 URL 正则契约而不是可请求地址，不能按 URL origin 解析。
+    const absoluteUrls = collectAbsoluteHttpUrls(navigableSource);
     assert.ok(
       absoluteUrls.every(isOfficialHttpUrl),
       '书源配置中的绝对 HTTP(S) 地址必须属于起点移动端官网',
@@ -146,7 +149,8 @@ test('起点官方免费书源满足静态契约和实时四段链路', async (t
     const detailHtml = await fetchHtml(`${source.bookSourceUrl}/book/${bookId}/`, headers);
     assert.equal(getMetaContent(detailHtml, 'property', 'og:novel:book_name'), keyword);
     assert.equal(getMetaContent(detailHtml, 'property', 'og:novel:author'), '天蚕土豆');
-    assert.match(getMetaContent(detailHtml, 'property', 'og:novel:category'), /玄幻/);
+    assert.equal(getMetaContent(detailHtml, 'property', 'og:novel:category'), '异世大陆');
+    assert.equal(getMetaContent(detailHtml, 'property', 'og:novel:status'), '完本');
     assert.match(detailHtml, /id=["']details-menu["'][^>]*href=["'][^"']*\/catalog\//i);
     assert.match(detailHtml, /class=["'][^"']*detail__header-cover__img[^"']*["']/i);
   });
