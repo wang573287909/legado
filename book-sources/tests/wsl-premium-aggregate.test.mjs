@@ -129,3 +129,44 @@ test('大型接口响应通过短内存键传递，不进入 data URL 或持久�
   ).toString('hex')))), response);
   assert.equal([...cache.values.values()].some((value) => value.includes('SYNTHETIC_BOOK')), false);
 });
+
+function response(status, body) {
+  return { body() { return body; }, code() { return status; } };
+}
+
+test('只读传输在 5xx 后切换并粘住成功节点', async () => {
+  const calls = [];
+  const java = makeJava((spec) => {
+    calls.push(String(spec));
+    if (calls.length === 1) return response(503, '{"code":-1,"msg":"down"}');
+    return response(200, '{"code":0,"msg":"ok","data":[1]}');
+  });
+  const { api, cache, context } = await loadRuntime(['config.js', 'state.js', 'transport.js'], { java });
+  const result = api.transport.read(context, '/search', { title: 'SYNTHETIC' });
+  assert.equal(result.ok, true);
+  assert.equal(result.host, 'https://v4.czyl.cf');
+  assert.equal(calls.length, 2);
+  assert.equal(cache.get('wsl_premium_aggregate:active_host'), 'https://v4.czyl.cf');
+  const secondResult = api.transport.read(context, '/detail', { book_id: 'BOOK_ID' });
+  assert.equal(secondResult.host, 'https://v4.czyl.cf');
+  assert.equal(calls.length, 3);
+  assert.match(calls[2], /^https:\/\/v4\.czyl\.cf\/detail/);
+});
+
+test('业务错误不切换，写操作在传输不确定时不重放', async () => {
+  let calls = 0;
+  const businessJava = makeJava(() => {
+    calls += 1;
+    return response(200, '{"code":-1,"msg":"今日次数已达上限","data":null}');
+  });
+  const first = await loadRuntime(['config.js', 'state.js', 'transport.js'], { java: businessJava });
+  const result = first.api.transport.read(first.context, '/content', {});
+  assert.equal(result.business, true);
+  assert.equal(calls, 1);
+
+  calls = 0;
+  const failedJava = makeJava(() => { calls += 1; throw new Error('timeout'); });
+  const second = await loadRuntime(['config.js', 'state.js', 'transport.js'], { java: failedJava });
+  assert.throws(() => second.api.transport.write(second.context, '/update_book_shelf', { ID: 'SHELF_ID' }), /timeout/);
+  assert.equal(calls, 1);
+});
