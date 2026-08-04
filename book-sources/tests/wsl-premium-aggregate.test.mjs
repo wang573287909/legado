@@ -95,3 +95,37 @@ test('协议登记只包含结构化证据，夹具只包含合成值', async ()
     assert.doesNotMatch(text, /斗破苍穹|萧炎|langge\.cf\/video\/cached/i, file);
   }
 });
+
+test('四个主键映射到正确媒体，共享配置不保存身份字段', async () => {
+  for (const [suffix, media] of Object.entries({ novel: '小说', audio: '听书', image: '漫画', video: '短剧' })) {
+    const source = { getKey() { return `https://www.qidian.com/#wsl-premium-aggregate-${suffix}`; } };
+    const loaded = await loadRuntime(['config.js'], { source });
+    assert.equal(loaded.api.config.media(loaded.context), media);
+  }
+  const loaded = await loadRuntime(['config.js']);
+  assert.throws(() => loaded.api.config.write(loaded.context, { token: 'SECRET' }), /不支持的配置字段/);
+  assert.equal(loaded.api.config.write(loaded.context, { syncBookshelf: true }).syncBookshelf, true);
+  assert.equal(loaded.api.config.read(loaded.context).syncBookshelf, true);
+});
+
+test('状态 URL 往返并拒绝敏感键、超长值和未知版本', async () => {
+  const { api, context } = await loadRuntime(['config.js', 'state.js']);
+  const state = { v: 1, kind: 'book', bookId: 'BOOK_ID', source: 'SYNTHETIC_SOURCE', tab: '小说' };
+  const url = api.state.toDataUri(context, state);
+  assert.match(url, /^data:application\/json;base64,/);
+  assert.deepEqual(JSON.parse(JSON.stringify(api.state.fromDataUri(context, url))), state);
+  assert.throws(() => api.state.toDataUri(context, { ...state, token: 'SECRET' }), /敏感字段/);
+  assert.throws(() => api.state.toDataUri(context, { ...state, v: 2 }), /状态版本/);
+  assert.throws(() => api.state.toDataUri(context, { ...state, title: 'x'.repeat(9000) }), /状态过长/);
+});
+
+test('大型接口响应通过短内存键传递，不进入 data URL 或持久缓存', async () => {
+  const { api, cache, context } = await loadRuntime(['config.js', 'state.js']);
+  const response = { code: 0, data: [{ name: 'SYNTHETIC_BOOK', intro: 'x'.repeat(20000) }] };
+  const url = api.state.stash(context, response);
+  assert.ok(url.length < 512);
+  assert.deepEqual(JSON.parse(JSON.stringify(api.state.readStashFromBody(context, Buffer.from(
+    JSON.stringify(api.state.fromDataUri(context, url)), 'utf8'
+  ).toString('hex')))), response);
+  assert.equal([...cache.values.values()].some((value) => value.includes('SYNTHETIC_BOOK')), false);
+});
