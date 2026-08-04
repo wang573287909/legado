@@ -146,12 +146,18 @@ test('起点官方免费书源满足静态契约和实时四段链路', async (t
     assert.equal(source.enableDangerousApi, false);
     assert.equal(source.searchUrl, '/soushu/{{key}}.html');
     assert.equal(source.ruleSearch.checkKeyWord, keyword);
-    assert.match(source.ruleSearch.bookUrl, /data-bid/);
+    // 重要逻辑：统一使用 Legado 与固定 Validator 都支持的 <js> 串联语法，避免 @js: 被当作 CSS 属性规则。
+    assert.equal(source.ruleSearch.bookUrl, "@data-bid<js>'https://m.qidian.com/book/'+result+'/'</js>");
+    assert.equal(
+      source.ruleBookInfo.kind,
+      `@CSS:meta[property="og:novel:category"]@content&&meta[property="og:novel:status"]@content`,
+    );
     assert.match(source.ruleBookInfo.coverUrl, /book\.coverUrl/);
     assert.match(source.ruleBookInfo.tocUrl, /baseUrl/);
-    assert.match(source.ruleToc.isVip, /_unPay_/);
+    assert.equal(source.ruleToc.isVip, "@CSS:a@class<js>result.indexOf('_unPay_') >= 0</js>");
     assert.match(source.ruleContent.content, /chapterInfo\.vipStatus/);
     assert.match(source.ruleContent.content, /重要逻辑/);
+    assert.doesNotMatch(sourceText, /@js:/i, '串联 JavaScript 必须使用兼容的 <js> 语法');
     assert.ok(headers && typeof headers === 'object' && !Array.isArray(headers), '请求头必须是 JSON 对象');
     assert.deepEqual(Object.keys(headers).sort(), allowedHeaderNames, '请求头只能包含最小化的公开浏览器字段');
     for (const field of forbiddenIntegrationFields) {
