@@ -1,0 +1,49 @@
+[
+  {
+    "bookSourceComment": "起点中文网官方移动网页书源，仅解析匿名公开元数据、目录和网页免费章节；App 专享或订阅章节标记为 VIP。",
+    "bookSourceGroup": "正版·公开章节",
+    "bookSourceName": "起点中文·官方免费",
+    "bookSourceType": 0,
+    "bookSourceUrl": "https://m.qidian.com",
+    "bookUrlPattern": "^https://m\\.qidian\\.com/book/\\d+/?$",
+    "customOrder": 0,
+    "enabled": true,
+    "enabledCookieJar": false,
+    "enabledExplore": false,
+    "enabledReview": false,
+    "enableDangerousApi": false,
+    "header": "{\"User-Agent\":\"Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36\",\"Accept-Language\":\"zh-CN,zh;q=0.9\"}",
+    "respondTime": 180000,
+    "searchUrl": "/soushu/{{key}}.html",
+    "ruleSearch": {
+      "checkKeyWord": "斗破苍穹",
+      "bookList": "@CSS:div[class*=\"_searchResList_\"] a[data-bid][href*=\"/chapter/\"]",
+      "name": "@CSS:h2@text",
+      "author": "@CSS:p[class*=\"_searchBookAuthor_\"]@text",
+      "intro": "@CSS:p[class*=\"_searchBookDesc_\"]@text",
+      "kind": "@CSS:div[class*=\"_tags_\"] > p@text",
+      "wordCount": "@CSS:div[class*=\"_tags_\"] > p:last-child@text",
+      "bookUrl": "@data-bid@js:'https://m.qidian.com/book/'+result+'/'",
+      "coverUrl": "@CSS:img@data-src"
+    },
+    "ruleBookInfo": {
+      "name": "@CSS:meta[property=\"og:novel:book_name\"]@content",
+      "author": "@CSS:meta[property=\"og:novel:author\"]@content",
+      "intro": "@CSS:meta[name=\"description\"]@content",
+      "kind": "@CSS:meta[property=\"og:novel:category\"]@content&&@CSS:meta[property=\"og:novel:status\"]@content",
+      "lastChapter": "@CSS:meta[property=\"og:novel:latest_chapter_name\"]@content",
+      "updateTime": "@CSS:meta[property=\"og:novel:update_time\"]@content",
+      "coverUrl": "@CSS:img.detail__header-cover__img@data-src<js>result || (book && book.coverUrl) || ''</js>",
+      "tocUrl": "@CSS:#details-menu@href<js>// 重要逻辑：目录入口缺失时，从当前详情页 URL 构造官方 catalog 地址。\nresult ? result : baseUrl.replace(/\\/?$/, '/') + 'catalog/'</js>"
+    },
+    "ruleToc": {
+      "chapterList": "@CSS:a[href*=\"/chapter/\"][class*=\"_chapterItem_\"]",
+      "chapterName": "@CSS:h2@text",
+      "chapterUrl": "@href",
+      "isVip": "@class@js:result.indexOf('_unPay_') >= 0"
+    },
+    "ruleContent": {
+      "content": "<js>\nvar content = '';\n// 重要逻辑：正文位于 SSR 页面上下文 JSON 中，不能把页面菜单或脚本整体当作正文。\nvar idMarker = 'id=\\\"vite-plugin-ssr_pageContext\\\"';\nvar markerIndex = result.indexOf(idMarker);\nif (markerIndex < 0) {\n  java.longToast('起点正文结构已变化：未找到页面上下文');\n} else {\n  var jsonStart = result.indexOf('>', markerIndex) + 1;\n  var jsonEnd = result.indexOf('</script>', jsonStart);\n  if (jsonStart <= 0 || jsonEnd <= jsonStart) {\n    java.longToast('起点正文结构已变化：页面上下文不完整');\n  } else {\n    try {\n      var pageData = JSON.parse(result.substring(jsonStart, jsonEnd));\n      var chapterInfo = pageData && pageData.pageContext && pageData.pageContext.pageProps && pageData.pageContext.pageProps.pageData && pageData.pageContext.pageProps.pageData.chapterInfo;\n      // 重要逻辑：vipStatus=1 且未购买时，即使 content 含提示文字也必须返回空，避免把锁章提示误作正文。\n      if (chapterInfo && Number(chapterInfo.vipStatus) === 1 && Number(chapterInfo.isBuy) === 0) {\n        java.longToast('该章节需在起点官方渠道阅读');\n      } else if (chapterInfo && typeof chapterInfo.content === 'string') {\n        content = chapterInfo.content;\n      }\n    } catch (error) {\n      java.longToast('起点正文解析失败：' + error.message);\n    }\n  }\n}\ncontent;\n</js>"
+    }
+  }
+]
