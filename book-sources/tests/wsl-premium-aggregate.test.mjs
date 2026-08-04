@@ -385,3 +385,66 @@ test('所有新增脚本署名 WSL，Rhino 运行时不含现代语法', async (
     }
   }
 });
+
+async function liveJson(url, options) {
+  const response = await fetch(url, options);
+  assert.ok(response.ok, `${new URL(url).pathname} HTTP ${response.status}`);
+  return response.json();
+}
+
+test('匿名实时链路覆盖搜索、详情、目录、发现和一次正文请求', {
+  skip: process.env.WSL_LIVE !== '1',
+}, async (t) => {
+  const media = process.env.WSL_LIVE_MEDIA || '小说';
+  assert.ok(['小说', '听书', '漫画', '短剧'].includes(media), 'WSL_LIVE_MEDIA 必须是四种媒体之一');
+  const host = process.env.WSL_LIVE_HOST || 'https://v10.czyl.cf';
+  const query = (values) => new URLSearchParams(values).toString();
+
+  const styles = await liveJson(`${host}/discovestyle?${query({ source: '', source_type: '男频', tab: media })}`);
+  assert.equal(Number(styles.code), 0);
+  const kind = (styles.data || []).find((item) => typeof item.url === 'string' && item.url.includes('/get_discover'));
+  assert.ok(kind, '未找到可点击发现栏目');
+  const discoverUrl = new URL(kind.url, host);
+  discoverUrl.host = new URL(host).host;
+  discoverUrl.protocol = new URL(host).protocol;
+  discoverUrl.searchParams.set('page', '1');
+  const discover = await liveJson(discoverUrl.toString());
+  assert.equal(Number(discover.code), 0);
+  assert.ok(Array.isArray(discover.data) && discover.data.length > 0);
+  const discoveredBook = discover.data.find((item) => item.book_name && item.book_id && item.source);
+  assert.ok(discoveredBook, '发现列表没有可串联验证的书籍');
+
+  // 重要逻辑：实时测试从当次发现结果取关键词，不依赖会随时间变化的固定书名或排行榜名次。
+  const keyword = process.env.WSL_LIVE_KEYWORD || String(discoveredBook.book_name);
+  const search = await liveJson(`${host}/search?${query({ title: keyword, tab: media, source: '', page: '1', disabled_sources: '0' })}`);
+  assert.equal(Number(search.code), 0);
+  assert.ok(Array.isArray(search.data) && search.data.length > 0);
+  const book = search.data.find((item) => item.book_id && item.source) || search.data[0];
+  assert.ok(book.book_id && book.source);
+
+  const common = { book_id: String(book.book_id), source: String(book.source), tab: media, variable: '{"custom":""}' };
+  const detail = await liveJson(`${host}/detail?${query(common)}`);
+  assert.equal(Number(detail.code), 0);
+  assert.ok(detail.data && typeof detail.data === 'object');
+
+  const catalog = await liveJson(`${host}/catalog?${query(common)}`);
+  assert.equal(Number(catalog.code), 0);
+  assert.ok(Array.isArray(catalog.data) && catalog.data.length > 0);
+
+  const chapter = catalog.data.find((item) => !item.is_volume && item.item_id);
+  assert.ok(chapter, '目录没有可请求的章节或集');
+  const content = await liveJson(`${host}/content`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8', Accept: 'application/json' },
+    body: JSON.stringify({
+      html: '', item_id: String(chapter.item_id), source: String(chapter.source || book.source),
+      tab: String(chapter.tab || media), tone_id: '4', variable: '{"custom":""}', version: '4.11.5.1',
+    }),
+  });
+  if (Number(content.code) === 0) {
+    assert.ok(typeof content.content === 'string' && content.content.length > 0);
+  } else {
+    assert.ok(typeof content.msg === 'string' && content.msg.length > 0);
+    t.diagnostic('正文服务可达，返回业务状态；未打印正文或媒体地址');
+  }
+});
