@@ -170,3 +170,53 @@ test('业务错误不切换，写操作在传输不确定时不重放', async ()
   assert.throws(() => second.api.transport.write(second.context, '/update_book_shelf', { ID: 'SHELF_ID' }), /timeout/);
   assert.equal(calls, 1);
 });
+
+function hexBody(value) {
+  return Buffer.from(typeof value === 'string' ? value : JSON.stringify(value), 'utf8').toString('hex');
+}
+
+test('搜索语法支持来源后缀和 @@ 转义，并保留同名不同来源', async () => {
+  const raw = await fixture('search');
+  raw.data.push({ ...raw.data[0], source: 'SECOND_SOURCE', book_id: 'SECOND_ID' });
+  const loaded = await loadRuntime(['config.js', 'state.js', 'transport.js', 'search.js']);
+  loaded.api.transport.read = () => ({ ok: true, data: raw.data, raw });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(loaded.api.search.parse('A@@B@SOURCE_X'))), {
+    title: 'A@B', upstream: 'SOURCE_X',
+  });
+  const responseUrl = loaded.api.search.url(loaded.context, 'A@@B@SOURCE_X', 2);
+  const books = loaded.api.search.list(loaded.context, hexBody(loaded.api.state.fromDataUri(loaded.context, responseUrl)));
+  assert.equal(books.length, 2);
+  assert.notEqual(books[0].bookUrl, books[1].bookUrl);
+  assert.equal(loaded.api.state.fromDataUri(loaded.context, books[0].bookUrl).bookId, 'BOOK_ID');
+  assert.throws(() => loaded.api.search.parse('   '), /关键词为空/);
+});
+
+test('详情用搜索种子回退空字段并生成同一书籍状态的目录 URL', async () => {
+  const raw = await fixture('detail');
+  raw.data.author = '';
+  raw.data.thumb_url = '';
+  const loaded = await loadRuntime(['config.js', 'state.js', 'transport.js', 'search.js', 'detail.js']);
+  loaded.api.transport.read = () => ({ ok: true, data: raw.data, raw });
+  const state = {
+    v: 1, kind: 'book', bookId: 'BOOK_ID', source: 'SYNTHETIC_SOURCE', tab: '小说',
+    variable: '{"custom":""}', seed: { author: 'SEED_AUTHOR', coverUrl: 'https://media.invalid/seed.jpg' },
+  };
+  const detail = JSON.parse(loaded.api.detail.load(loaded.context, hexBody(state)));
+  assert.equal(detail.author, 'SEED_AUTHOR');
+  assert.equal(detail.coverUrl, 'https://media.invalid/seed.jpg');
+  assert.equal(loaded.api.state.fromDataUri(loaded.context, detail.tocUrl).bookId, 'BOOK_ID');
+});
+
+test('目录保持服务端顺序并映射卷、VIP 与章节状态', async () => {
+  const raw = await fixture('catalog');
+  raw.data[1].is_pay = true;
+  const loaded = await loadRuntime(['config.js', 'state.js', 'transport.js', 'catalog.js']);
+  loaded.api.transport.read = () => ({ ok: true, data: raw.data, raw });
+  const state = { v: 1, kind: 'book', bookId: 'BOOK_ID', source: 'SYNTHETIC_SOURCE', tab: '小说', variable: '{"custom":""}' };
+  const chapters = loaded.api.catalog.list(loaded.context, hexBody(state));
+  assert.deepEqual(chapters.map((item) => item.title), ['第一卷', '第1章']);
+  assert.equal(chapters[0].isVolume, true);
+  assert.equal(chapters[1].isVip, true);
+  assert.equal(loaded.api.state.fromDataUri(loaded.context, chapters[1].chapterUrl).itemId, 'ITEM_ID');
+});
