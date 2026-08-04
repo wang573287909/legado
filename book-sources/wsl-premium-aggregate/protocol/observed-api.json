@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "secureHosts": [
+    "https://v10.czyl.cf",
+    "https://v4.czyl.cf",
+    "https://v2.czyl.cf",
+    "https://api.langge.cf",
+    "https://20.langge.tk"
+  ],
+  "insecureHost": "http://219.154.201.122:5006",
+  "excludedHosts": ["https://legado.langge.cf", "https://sy.langge.cf"],
+  "endpoints": {
+    "search": {"method": "GET", "path": "/search", "queryFields": ["title", "tab", "source", "page", "disabled_sources"], "evidence": "anonymous-success"},
+    "detail": {"method": "GET", "path": "/detail", "queryFields": ["book_id", "source", "tab", "variable"], "evidence": "anonymous-success"},
+    "catalog": {"method": "GET", "path": "/catalog", "queryFields": ["book_id", "source", "tab", "variable"], "evidence": "anonymous-success"},
+    "content": {"method": "POST", "path": "/content", "contentType": "application/json; charset=utf-8", "bodyFields": ["html", "item_id", "source", "tab", "tone_id", "variable", "version"], "responseFields": ["code", "msg", "time", "cache", "title", "content", "contents"], "evidence": "anonymous-success-all-media"},
+    "discoverStyle": {"method": "GET", "path": "/discovestyle", "queryFields": ["source", "source_type", "tab"], "evidence": "anonymous-success"},
+    "discoverList": {"method": "GET", "path": "/get_discover", "queryFields": ["source", "tab", "page"], "evidence": "anonymous-success"},
+    "loginPage": {"method": "GET", "path": "/login", "evidence": "html-success"},
+    "registerPage": {"method": "GET", "path": "/register", "evidence": "html-success"},
+    "avatar": {"method": "GET", "path": "/get_avatar", "evidence": "request-key-capture-required"},
+    "bookshelfCheck": {"method": "POST", "path": "/check_book_in_book_shelf", "requiredFields": ["EMAIL", "BookId"], "evidence": "request-encoding-capture-required"},
+    "bookshelfAdd": {"method": "POST", "path": "/add_book_to_book_shelf", "requiredFields": ["EMAIL", "BookName", "BookId", "Source", "Tab"], "evidence": "request-encoding-capture-required"},
+    "bookshelfUpdate": {"method": "POST", "path": "/update_book_shelf", "requiredFields": ["ID", "EMAIL"], "evidence": "progress-fields-capture-required"},
+    "bookshelfList": {"method": "GET", "path": "/get_book_shelf", "evidence": "anonymous-error-observed"},
+    "reviewList": {"method": "GET", "path": "/para_review", "queryFields": ["book_id", "item_id", "source", "tab", "cursor"], "evidence": "anonymous-success"},
+    "reviewPost": {"method": "POST", "path": "/post_idea_review", "evidence": "server-disabled-observed"},
+    "onlineVideo": {"method": "GET", "path": "/online_video", "queryFields": ["book_id", "source", "tab"], "evidence": "html-success"}
+  }
+}

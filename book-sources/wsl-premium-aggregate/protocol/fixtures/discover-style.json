@@ -1,0 +1,1 @@
+{"code":0,"msg":"","data":[{"title":"排行榜","url":"","style":{"layout_flexGrow":1,"layout_flexBasisPercent":1}},{"title":"推荐榜","url":"https://v10.czyl.cf/get_discover?source=SYNTHETIC_SOURCE&tab=小说&bdtype=推荐榜&page={{page}}","style":{"layout_flexGrow":1,"layout_flexBasisPercent":0.25}},{"title":"--","url":"","style":{"layout_flexGrow":1,"layout_flexBasisPercent":0.25}}]}
