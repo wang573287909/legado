@@ -244,3 +244,30 @@ test('发现栏目丢弃占位项、改写节点 origin 并复用书籍映射', 
   assert.equal(books[0].name, 'SYNTHETIC_DISCOVER_BOOK');
   assert.equal(loaded.api.state.fromDataUri(loaded.context, books[0].bookUrl).bookId, 'DISCOVER_BOOK_ID');
 });
+
+test('正文适配器分别输出文本、音频 URL、图片 HTML 和视频 URL', async () => {
+  const names = { 小说: 'content-novel', 听书: 'content-audio', 漫画: 'content-image', 短剧: 'content-video' };
+  for (const [tab, name] of Object.entries(names)) {
+    const raw = await fixture(name);
+    const loaded = await loadRuntime(['config.js', 'state.js', 'transport.js', 'content.js']);
+    loaded.api.transport.postRead = () => ({ ok: true, raw, data: raw.data });
+    const chapter = {
+      v: 1, kind: 'chapter', bookId: 'BOOK_ID', itemId: 'ITEM_ID',
+      source: 'SYNTHETIC_SOURCE', tab, title: 'ITEM', variable: '{"custom":""}',
+    };
+    const output = loaded.api.content.load(loaded.context, hexBody(chapter));
+    if (tab === '小说') {
+      assert.match(output, /SYNTHETIC_PARAGRAPH_ONE/);
+      assert.doesNotMatch(output, /今日已访问|SYNTHETIC_SERVICE_NOTICE/);
+    } else if (tab === '听书') assert.equal(output, 'https://media.invalid/audio.mp3');
+    else if (tab === '漫画') assert.deepEqual(output.match(/<img /g)?.length, 2);
+    else assert.equal(output, 'https://media.invalid/video.mp4');
+  }
+});
+
+test('正文业务错误原样抛出且不会尝试其他内容适配器', async () => {
+  const loaded = await loadRuntime(['config.js', 'state.js', 'transport.js', 'content.js']);
+  loaded.api.transport.postRead = () => ({ ok: false, business: true, message: '今日次数已达上限' });
+  const chapter = { v: 1, kind: 'chapter', bookId: 'BOOK_ID', itemId: 'ITEM_ID', source: 'SYNTHETIC_SOURCE', tab: '小说' };
+  assert.throws(() => loaded.api.content.load(loaded.context, hexBody(chapter)), /今日次数已达上限/);
+});
