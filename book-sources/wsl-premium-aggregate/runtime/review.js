@@ -3,6 +3,8 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
 (function (api) {
   var cursors = api.reviewCursors || {};
   api.reviewCursors = cursors;
+  var CURSOR_TTL_MS = 10 * 60 * 1000;
+  var CURSOR_LIMIT = 64;
   function clean(value) { return value === undefined || value === null ? '' : String(value).trim(); }
   function objectUrl(value, property, getter) {
     if (!value) return '';
@@ -18,20 +20,44 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
   function cursorKey(state, page) {
     return state.source + ':' + state.bookId + ':' + clean(state.itemId) + ':' + page;
   }
+  function purgeCursors(now) {
+    Object.keys(cursors).forEach(function (key) {
+      var record = cursors[key];
+      if (!record || typeof record.createdAt !== 'number' || now - record.createdAt > CURSOR_TTL_MS) {
+        delete cursors[key];
+      }
+    });
+  }
+  function readCursor(key) {
+    purgeCursors(Date.now());
+    return cursors[key] ? clean(cursors[key].value) : '';
+  }
+  function saveCursor(key, value) {
+    var now = Date.now();
+    purgeCursors(now);
+    var keys = Object.keys(cursors);
+    if (!cursors[key] && keys.length >= CURSOR_LIMIT) delete cursors[keys[0]];
+    cursors[key] = { createdAt: now, value: String(value) };
+  }
+  function clear() {
+    Object.keys(cursors).forEach(function (key) { delete cursors[key]; });
+  }
   function emptyResponse() {
     return { code: 0, msg: '', data: { comments: [], total: 0, has_more: false, next_cursor: '' } };
   }
   function url(ctx, book, chapter, paragraphIndex, page) {
     if (!api.config.read(ctx).reviews) return api.state.stash(ctx, emptyResponse());
+    // 重要逻辑：抓包证据只覆盖章节级评论，书籍级和段落级不复用该接口，避免猜测层级语义。
+    if (Number(paragraphIndex) !== 0) return api.state.stash(ctx, emptyResponse());
     var state = requestState(ctx, book, chapter);
     var pageNumber = Number(page || 1);
     var envelope = api.transport.requireSuccess(ctx, api.transport.read(ctx, '/para_review', {
       book_id: state.bookId, item_id: clean(state.itemId), source: state.source,
-      tab: state.tab, cursor: clean(cursors[cursorKey(state, pageNumber)])
+      tab: state.tab, cursor: readCursor(cursorKey(state, pageNumber))
     }));
     // 重要逻辑：游标只保存在当前共享运行时内存中，避免把阅读轨迹写进持久缓存。
     if (envelope.data && envelope.data.next_cursor) {
-      cursors[cursorKey(state, pageNumber + 1)] = String(envelope.data.next_cursor);
+      saveCursor(cursorKey(state, pageNumber + 1), envelope.data.next_cursor);
     }
     return api.state.stash(ctx, envelope.raw);
   }
@@ -60,5 +86,5 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
   }
 
   // 服务端已明确关闭 /post_idea_review，因此这里只暴露读取映射，不生成发表、点赞或删除规则。
-  api.review = { url: url, list: list, total: total, hasMore: hasMore };
+  api.review = { url: url, list: list, total: total, hasMore: hasMore, clear: clear };
 })(WSLPA);

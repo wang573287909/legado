@@ -41,11 +41,33 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
     if (status >= 500) return { retryable: true, message: 'HTTP ' + status };
     var parsed;
     try { parsed = JSON.parse(String(text || '')); }
-    catch (error) { return { retryable: true, message: '响应不是 JSON' }; }
-    if (status >= 400 || Number(parsed.code) !== 0) {
+    catch (error) {
+      // 重要逻辑：HTTP 4xx 本身已是确定的业务响应，即使错误页不是 JSON 也不轮换节点。
+      if (status >= 400) {
+        return {
+          ok: false, business: true, code: status, message: 'HTTP ' + status,
+          data: null, host: host, raw: null
+        };
+      }
+      return { retryable: true, message: '响应不是 JSON' };
+    }
+    if (status >= 400) {
+      var errorEnvelope = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
       return {
-        ok: false, business: true, code: parsed.code,
-        message: String(parsed.msg || parsed.error || ('HTTP ' + status)),
+        ok: false, business: true, code: errorEnvelope.code === undefined ? status : errorEnvelope.code,
+        message: String(errorEnvelope.msg || errorEnvelope.error || ('HTTP ' + status)),
+        data: errorEnvelope.data, host: host, raw: parsed
+      };
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+        !Object.prototype.hasOwnProperty.call(parsed, 'code') ||
+        parsed.code === null || String(parsed.code).trim() === '' || !isFinite(Number(parsed.code))) {
+      return { retryable: true, message: '响应 code 无效' };
+    }
+    if (Number(parsed.code) !== 0) {
+      return {
+        ok: false, business: true, code: Number(parsed.code),
+        message: String(parsed.msg || parsed.error || '服务返回业务错误'),
         data: parsed.data, host: host, raw: parsed
       };
     }
@@ -53,6 +75,84 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
       ok: true, business: false, code: 0, message: String(parsed.msg || ''),
       data: parsed.data, host: host, raw: parsed
     };
+  }
+  function object(value) { return !!value && typeof value === 'object' && !Array.isArray(value); }
+  function clean(value) { return value === undefined || value === null ? '' : String(value).trim(); }
+  function httpUrl(value) { return /^https?:\/\/[^\s]+$/i.test(clean(value)); }
+  function novelReadable(value) {
+    var html = clean(value)
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<(script|style|iframe|object|embed|form|svg|math|template|noscript)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '');
+    var safeImage = false;
+    html.replace(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi, function (_, url) {
+      if (httpUrl(url)) safeImage = true;
+      return '';
+    });
+    // 重要逻辑：小说节点只有在净化后仍含可读文本或安全图片时才算成功，空壳响应留在候选循环内切换。
+    var text = html.replace(/<[^>]*>/g, '').replace(/&(?:nbsp|#160|#x0*a0);?/gi, ' ').replace(/\u00a0/g, ' ').trim();
+    return safeImage || !!text;
+  }
+  function mediaMatches(ctx, item) {
+    return !item.tab || String(item.tab).trim() === api.config.media(ctx);
+  }
+  function booksValid(ctx, data) {
+    if (!Array.isArray(data)) return false;
+    return data.every(function (item) {
+      return object(item) && item.book_id !== undefined && String(item.book_id).trim() &&
+        item.source !== undefined && String(item.source).trim() && mediaMatches(ctx, item);
+    });
+  }
+  function schemaError(ctx, path, envelope) {
+    if (path === '/search' || path === '/get_discover') {
+      return booksValid(ctx, envelope.data) ? '' : '书籍列表字段无效';
+    }
+    if (path === '/detail') {
+      var detail = envelope.data || {};
+      var hasMetadata = ['book_name', 'author', 'abstract', 'thumb_url', 'category', 'last_chapter_title']
+        .some(function (key) { return !!clean(detail[key]); });
+      return object(detail) && hasMetadata && mediaMatches(ctx, detail) ? '' : '详情字段无效';
+    }
+    if (path === '/catalog') {
+      if (!Array.isArray(envelope.data)) return '目录字段无效';
+      return envelope.data.every(function (item) {
+        return object(item) && clean(item.title) && mediaMatches(ctx, item) &&
+          (item.is_volume === true || !!clean(item.item_id));
+      }) ? '' : '目录字段无效';
+    }
+    if (path === '/discovestyle') {
+      return Array.isArray(envelope.data) && envelope.data.every(object) ? '' : '发现栏目字段无效';
+    }
+    if (path === '/content') {
+      var raw = envelope.raw || {};
+      var media = api.config.media(ctx);
+      if (media === '小说') return novelReadable(raw.content) ? '' : '正文字段无效';
+      if (media === '听书') return httpUrl(raw.content) ? '' : '音频字段无效';
+      if (media === '漫画') {
+        var count = 0;
+        var valid = true;
+        clean(raw.content).replace(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi, function (_, url) {
+          count += 1;
+          if (!httpUrl(url)) valid = false;
+          return '';
+        });
+        return count > 0 && valid ? '' : '漫画字段无效';
+      }
+      if (media === '短剧') {
+        if (Array.isArray(raw.contents) && raw.contents.length) {
+          return raw.contents.every(function (item) { return object(item) && httpUrl(item.url); }) ? '' : '视频字段无效';
+        }
+        return httpUrl(raw.content) ? '' : '视频字段无效';
+      }
+      return '正文媒体类型无效';
+    }
+    if (path === '/para_review') {
+      return object(envelope.data) && Array.isArray(envelope.data.comments) &&
+        envelope.data.comments.every(object) ? '' : '评论字段无效';
+    }
+    if (path === '/check_book_in_book_shelf') {
+      return object(envelope.data) ? '' : '书架检查字段无效';
+    }
+    return '';
   }
   function request(ctx, method, path, query, body, mutating) {
     if (String(path).charAt(0) !== '/' || String(path).indexOf('://') >= 0) throw new Error('服务路径无效');
@@ -74,6 +174,12 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
           markFailure(ctx, host);
           lastError = new Error(envelope.message);
           if (mutating) throw lastError;
+          continue;
+        }
+        var invalid = envelope.ok && !mutating ? schemaError(ctx, path, envelope) : '';
+        if (invalid) {
+          markFailure(ctx, host);
+          lastError = new Error(invalid);
           continue;
         }
         ctx.cache.put(ACTIVE_KEY, host);

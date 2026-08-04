@@ -10,7 +10,7 @@
 
 ---
 
-**Author:** WSL  
+**Author:** WSL
 **Design:** `docs/superpowers/specs/2026-08-04-wsl-premium-aggregate-book-source-design.md`
 
 ## Implementation Constraints

@@ -7,11 +7,47 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
     if (!/^https?:\/\/[^\s]+$/i.test(value)) throw new Error(label + '地址无效');
     return value;
   }
+  function decodeEntities(value) {
+    return String(value)
+      .replace(/&#x([0-9a-f]+);?/gi, function (_, hex) { return String.fromCharCode(parseInt(hex, 16)); })
+      .replace(/&#([0-9]+);?/g, function (_, decimal) { return String.fromCharCode(parseInt(decimal, 10)); })
+      .replace(/&colon;/gi, ':').replace(/&sol;/gi, '/').replace(/&amp;/gi, '&');
+  }
+  function escapeAttribute(value) {
+    return String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  }
+  function safeImage(tag) {
+    var match = String(tag).match(/\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+    if (!match) return '';
+    var url = decodeEntities(match[1] || match[2] || match[3] || '').trim();
+    if (!/^https?:\/\/[^\s"'<>]+$/i.test(url)) return '';
+    return '<img src="' + escapeAttribute(url) + '">';
+  }
+  function sanitizeNovelHtml(input) {
+    var allowed = {
+      p: true, br: true, div: true, span: true, b: true, strong: true,
+      i: true, em: true, u: true, s: true, del: true, blockquote: true,
+      pre: true, code: true, h1: true, h2: true, h3: true, h4: true,
+      h5: true, h6: true, ul: true, ol: true, li: true, hr: true,
+      sub: true, sup: true, img: true
+    };
+    var html = String(input || '')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<(script|style|iframe|object|embed|form|svg|math|template|noscript)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '');
+    // 重要逻辑：只按允许列表重建标签；普通标签的全部属性被丢弃，图片仅保留验证后的 HTTP(S) src。
+    return html.replace(/<[^>]*>/g, function (tag) {
+      var match = tag.match(/^<\s*(\/?)\s*([a-z0-9]+)\b/i);
+      if (!match) return '';
+      var closing = !!match[1];
+      var name = match[2].toLowerCase();
+      if (!allowed[name]) return '';
+      if (name === 'img') return closing ? '' : safeImage(tag);
+      if (name === 'br' || name === 'hr') return closing ? '' : '<' + name + '>';
+      return closing ? '</' + name + '>' : '<' + name + '>';
+    });
+  }
   function novel(raw) {
-    var value = clean(raw.content)
-      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*')/gi, '');
+    var value = sanitizeNovelHtml(clean(raw.content));
     // 重要逻辑：服务端在匿名正文尾部附加配额与推广说明，只截断已观察的固定配额标记。
     var markers = ['您当前未登录，今日已访问', '您今日已访问'];
     markers.forEach(function (marker) {

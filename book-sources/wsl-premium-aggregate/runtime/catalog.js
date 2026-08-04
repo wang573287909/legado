@@ -11,15 +11,20 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
     if (!Array.isArray(envelope.data)) throw new Error('目录响应 data 不是数组');
     // 重要逻辑：直接按接口数组映射，不在本地排序，保证卷标与章节的相对位置不变。
     return envelope.data.map(function (item, index) {
-      var itemId = clean(item.item_id) || ('volume-' + index);
+      if (clean(item.tab) && clean(item.tab) !== book.tab) throw new Error('目录媒体类型无效');
+      var isVolume = item.is_volume === true;
+      var itemId = clean(item.item_id);
+      if (!isVolume && !itemId) throw new Error('目录章节缺少 item_id');
+      if (!itemId) itemId = 'volume-' + index;
       var chapter = {
         v: 1, kind: 'chapter', bookId: book.bookId, itemId: itemId,
-        source: clean(item.source) || book.source, tab: clean(item.tab) || book.tab,
-        title: clean(item.title), url: clean(item.url), variable: book.variable || '{"custom":""}'
+        source: clean(item.source) || book.source, tab: book.tab,
+        // 重要逻辑：item.url 可能是短期签名媒体地址，正文未使用它，因此不写入持久章节状态。
+        title: clean(item.title), variable: book.variable || '{"custom":""}'
       };
       return {
         title: chapter.title, chapterUrl: api.state.toDataUri(ctx, chapter),
-        updateTime: clean(item.first_pass_time), isVolume: item.is_volume === true,
+        updateTime: clean(item.first_pass_time), isVolume: isVolume,
         isVip: item.is_pay === true, isPay: item.is_pay === true
       };
     });

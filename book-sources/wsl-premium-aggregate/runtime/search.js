@@ -19,10 +19,12 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
     return values.join(',');
   }
   function bookState(ctx, item) {
-    var tab = clean(item.tab) || api.config.media(ctx);
+    var tab = api.config.media(ctx);
+    if (clean(item.tab) && clean(item.tab) !== tab) throw new Error('搜索结果媒体类型无效');
     var state = {
       v: 1, kind: 'book', bookId: clean(item.book_id), source: clean(item.source), tab: tab,
-      variable: clean(item.variable) || '{"custom":""}',
+      // 重要逻辑：服务端 variable 属于 opaque 值，只持久化已观察且不含身份数据的固定公开结构。
+      variable: '{"custom":""}',
       seed: {
         name: clean(item.book_name), author: clean(item.author), intro: clean(item.abstract),
         coverUrl: clean(item.thumb_url), kind: kinds(item), wordCount: clean(item.word_number),

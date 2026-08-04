@@ -9,6 +9,11 @@
   ],
   "insecureHost": "http://219.154.201.122:5006",
   "excludedHosts": ["https://legado.langge.cf", "https://sy.langge.cf"],
+  "accountWrites": {
+    "enabled": false,
+    "failureLogRedaction": "capture-required",
+    "blockers": ["authenticated-request-contract-capture", "host-failure-log-redaction"]
+  },
   "endpoints": {
     "search": {"method": "GET", "path": "/search", "queryFields": ["title", "tab", "source", "page", "disabled_sources"], "evidence": "anonymous-success"},
     "detail": {"method": "GET", "path": "/detail", "queryFields": ["book_id", "source", "tab", "variable"], "evidence": "anonymous-success"},
@@ -23,7 +28,7 @@
     "bookshelfAdd": {"method": "POST", "path": "/add_book_to_book_shelf", "requiredFields": ["EMAIL", "BookName", "BookId", "Source", "Tab"], "evidence": "request-encoding-capture-required"},
     "bookshelfUpdate": {"method": "POST", "path": "/update_book_shelf", "requiredFields": ["ID", "EMAIL"], "evidence": "progress-fields-capture-required"},
     "bookshelfList": {"method": "GET", "path": "/get_book_shelf", "evidence": "anonymous-error-observed"},
-    "reviewList": {"method": "GET", "path": "/para_review", "queryFields": ["book_id", "item_id", "source", "tab", "cursor"], "evidence": "anonymous-success"},
+    "reviewList": {"method": "GET", "path": "/para_review", "queryFields": ["book_id", "item_id", "source", "tab", "cursor"], "levels": ["chapter"], "evidence": "anonymous-success"},
     "reviewPost": {"method": "POST", "path": "/post_idea_review", "evidence": "server-disabled-observed"},
     "onlineVideo": {"method": "GET", "path": "/online_video", "queryFields": ["book_id", "source", "tab"], "evidence": "html-success"}
   }

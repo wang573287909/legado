@@ -2,18 +2,30 @@
 var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
 (function (api) {
   function clean(value) { return value === undefined || value === null ? '' : String(value).trim(); }
+  function safeDecode(value) {
+    try { return decodeURIComponent(String(value).replace(/\+/g, ' ')); }
+    catch (error) { return null; }
+  }
   function parseQuery(url) {
     var query = {};
+    var valid = true;
     var text = clean(url);
     var start = text.indexOf('?');
     if (start < 0) return query;
     text.substring(start + 1).split('&').forEach(function (pair) {
       var index = pair.indexOf('=');
-      var key = decodeURIComponent(index < 0 ? pair : pair.substring(0, index));
-      var value = decodeURIComponent(index < 0 ? '' : pair.substring(index + 1));
+      var key = safeDecode(index < 0 ? pair : pair.substring(0, index));
+      var value = safeDecode(index < 0 ? '' : pair.substring(index + 1));
+      if (key === null || value === null) { valid = false; return; }
       if (key && key !== 'page') query[key] = value;
     });
-    return query;
+    return valid ? query : null;
+  }
+  function requestPath(url) {
+    var text = clean(url).split('#')[0];
+    var queryStart = text.indexOf('?');
+    if (queryStart >= 0) text = text.substring(0, queryStart);
+    return text.replace(/^https?:\/\/[^/]+/i, '') || '/';
   }
   function cols(style) {
     var width = Number(style && style.layout_flexBasisPercent);
@@ -35,7 +47,12 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
         mapped.push({ title: title, type: 'title', style: { cols: 1 } });
         return;
       }
-      var state = { v: 1, kind: 'discover', path: '/get_discover', query: parseQuery(item.url) };
+      // 重要逻辑：动态栏目只接受已验证的发现列表路径，其他服务端链接不进入书源执行链。
+      if (requestPath(item.url) !== '/get_discover') return;
+      var query = parseQuery(item.url);
+      // 单个上游栏目编码损坏时只丢弃该栏目，保留同一发现页中的其他有效入口。
+      if (!query) return;
+      var state = { v: 1, kind: 'discover', path: '/get_discover', query: query };
       // 重要逻辑：只保存路径参数，服务端返回的节点 origin 不进入发现链接，打开时仍走统一故障切换。
       var stateUrl = api.state.toDataUri(ctx, state);
       mapped.push({

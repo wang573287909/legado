@@ -1,6 +1,6 @@
 {
   "common": {
-    "bookSourceComment": "独立实现的多媒体聚合书源，依赖示例书源当前使用的第三方服务器。账号态写接口仅在脱敏协议登记为已识别后启用。",
+    "bookSourceComment": "独立实现的多媒体聚合书源，依赖示例书源当前使用的第三方服务器。账号态写接口仅在精确协议与宿主失败日志脱敏均验证后启用。",
     "bookSourceGroup": "WSL·精品聚合",
     "enabled": true,
     "enabledExplore": true,

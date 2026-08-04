@@ -6,11 +6,8 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
   function allHosts() { return api.config.secureHosts.concat([INSECURE_HOST]); }
   function cleanCookie(value) { return String(value || '').trim(); }
   function sessionHost(ctx) {
-    var hosts = allHosts();
-    for (var index = 0; index < hosts.length; index += 1) {
-      if (cleanCookie(ctx.java.getCookie(hosts[index]))) return hosts[index];
-    }
-    return '';
+    var host = api.transport.currentHost(ctx);
+    return cleanCookie(ctx.java.getCookie(host)) ? host : '';
   }
   function refresh(ctx) { ctx.java.refreshUi('login'); ctx.java.refreshUi('explore'); }
   function row(name, action, cols) {
@@ -23,7 +20,7 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
       { name: host ? '状态：检测到登录 Cookie' : '状态：匿名', type: 'title', style: { cols: 1 } },
       { name: EMAIL_FIELD, type: 'text', style: { cols: 1 } },
       row('打开登录页面', 'WSLPA.auth.openLogin(WSLPA.ctx(java, source, cache, cookie));', 2),
-      row('检查登录状态', 'WSLPA.auth.check(WSLPA.ctx(java, source, cache, cookie));', 2),
+      row('检查当前节点 Cookie', 'WSLPA.auth.check(WSLPA.ctx(java, source, cache, cookie));', 2),
       row('退出全部节点', 'WSLPA.auth.logout(WSLPA.ctx(java, source, cache, cookie));', 2),
       row('清除节点记录', 'WSLPA.auth.clearHealth(WSLPA.ctx(java, source, cache, cookie));', 2),
       row('节点：' + (config.nodeMode === 'auto' ? '自动' : config.fixedHost), 'WSLPA.auth.cycleNode(WSLPA.ctx(java, source, cache, cookie));', 1),
@@ -40,13 +37,16 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
   }
   function check(ctx) {
     var host = sessionHost(ctx);
-    ctx.java.longToast(host ? '已检测到当前节点的登录 Cookie' : '当前为匿名状态');
+    ctx.java.longToast(host ? '当前活动节点检测到 Cookie（不等同服务器认证校验）' : '当前活动节点未检测到 Cookie');
     refresh(ctx);
     return !!host;
   }
   function logout(ctx) {
     // 重要逻辑：只清理本书源声明的服务节点，避免影响用户在其他网站的登录 Cookie。
     allHosts().forEach(function (host) { ctx.cookie.removeCookie(host); });
+    if (api.state && api.state.clearResponses) api.state.clearResponses();
+    if (api.review && api.review.clear) api.review.clear();
+    if (api.bookshelf && api.bookshelf.clear) api.bookshelf.clear(ctx);
     refresh(ctx);
   }
   function toggle(ctx, key) {
