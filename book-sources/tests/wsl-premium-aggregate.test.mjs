@@ -293,3 +293,46 @@ test('登录 UI 从共享配置生成，Cookie 状态不写入共享缓存', asy
   assert.equal(removed.length, 6);
   assert.doesNotMatch([...cache.values.values()].join('\n'), /SESSION_COOKIE|token|authorization/i);
 });
+
+test('书架写入只有契约被识别后启用，进度按章节和十分钟节流', async () => {
+  const loaded = await loadRuntime(['config.js', 'state.js', 'transport.js', 'auth.js', 'bookshelf.js']);
+  loaded.api.config.write(loaded.context, { syncBookshelf: true });
+  loaded.api.auth.email = () => 'reader@example.invalid';
+  const writes = [];
+  loaded.api.transport.postRead = () => ({ ok: true, data: { exists: false }, raw: { code: 0, data: { exists: false } } });
+  loaded.api.transport.write = (_ctx, pathName, body) => {
+    writes.push([pathName, body]);
+    return { ok: true, data: pathName.includes('add_') ? { id: 'SHELF_ID' } : null, raw: { code: 0 } };
+  };
+  const book = { v: 1, kind: 'book', bookId: 'BOOK_ID', source: 'SYNTHETIC_SOURCE', tab: '小说' };
+  assert.equal(loaded.api.bookshelf.ensure(loaded.context, book, { name: 'SYNTHETIC_BOOK' }), false);
+  assert.equal(writes.length, 0);
+
+  loaded.api.protocol = { endpoints: {
+    bookshelfCheck: { evidence: 'authenticated-request-recognized', contentType: 'application/json', requiredFields: ['EMAIL', 'BookId'] },
+    bookshelfAdd: { evidence: 'authenticated-request-recognized', contentType: 'application/json', requiredFields: ['EMAIL', 'BookName', 'BookId', 'Source', 'Tab'] },
+    bookshelfUpdate: { evidence: 'authenticated-request-recognized', contentType: 'application/json', requiredFields: ['ID', 'EMAIL', 'BookId', 'ItemId', 'Title'] },
+  } };
+  assert.equal(loaded.api.bookshelf.ensure(loaded.context, book, { name: 'SYNTHETIC_BOOK' }), true);
+  const chapter = { v: 1, kind: 'chapter', bookId: 'BOOK_ID', itemId: 'ITEM_ID', source: 'SYNTHETIC_SOURCE', tab: '小说', title: '第1章' };
+  assert.equal(loaded.api.bookshelf.sync(loaded.context, chapter), true);
+  assert.equal(loaded.api.bookshelf.sync(loaded.context, chapter), false);
+  assert.deepEqual(writes.map(([pathName]) => pathName), ['/add_book_to_book_shelf', '/update_book_shelf']);
+});
+
+test('评论读取映射用户、图片、计数和游标，不配置已关闭的写规则', async () => {
+  const raw = await fixture('review');
+  const loaded = await loadRuntime(['config.js', 'state.js', 'transport.js', 'review.js']);
+  loaded.api.transport.read = () => ({ ok: true, raw, data: raw.data });
+  const bookUrl = loaded.api.state.toDataUri(loaded.context, { v: 1, kind: 'book', bookId: 'BOOK_ID', source: 'SYNTHETIC_SOURCE', tab: '小说' });
+  const chapterUrl = loaded.api.state.toDataUri(loaded.context, { v: 1, kind: 'chapter', bookId: 'BOOK_ID', itemId: 'ITEM_ID', source: 'SYNTHETIC_SOURCE', tab: '小说' });
+  const responseUrl = loaded.api.review.url(loaded.context, { bookUrl }, { url: chapterUrl }, 0, 1);
+  const body = hexBody(loaded.api.state.fromDataUri(loaded.context, responseUrl));
+  const comments = loaded.api.review.list(loaded.context, body);
+  assert.equal(comments[0].reviewId, 'COMMENT_ID');
+  assert.equal(comments[0].name, 'SYNTHETIC_READER');
+  assert.equal(comments[0].images[0], 'https://media.invalid/review.jpg');
+  assert.equal(loaded.api.review.total(loaded.context, body), 1);
+  assert.equal(loaded.api.review.hasMore(loaded.context, body), false);
+  assert.equal(loaded.api.review.reply, undefined);
+});
