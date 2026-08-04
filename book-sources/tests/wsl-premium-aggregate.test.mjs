@@ -220,3 +220,27 @@ test('目录保持服务端顺序并映射卷、VIP 与章节状态', async () =
   assert.equal(chapters[1].isVip, true);
   assert.equal(loaded.api.state.fromDataUri(loaded.context, chapters[1].chapterUrl).itemId, 'ITEM_ID');
 });
+
+test('发现栏目丢弃占位项、改写节点 origin 并复用书籍映射', async () => {
+  const style = await fixture('discover-style');
+  const listing = await fixture('discover-list');
+  const loaded = await loadRuntime(['config.js', 'state.js', 'transport.js', 'search.js', 'explore.js']);
+  loaded.api.transport.read = (_ctx, pathName) => ({
+    ok: true,
+    data: pathName === '/discovestyle' ? style.data : listing.data,
+    raw: pathName === '/discovestyle' ? style : listing,
+  });
+  const kinds = JSON.parse(loaded.api.explore.kinds(loaded.context));
+  assert.deepEqual(kinds.map((kind) => kind.title), ['排行榜', '推荐榜']);
+  assert.equal(kinds[0].type, 'title');
+  assert.equal(kinds[1].style.cols, 4);
+  assert.doesNotMatch(kinds[1].url, /v10\.czyl\.cf/);
+
+  const encodedState = JSON.parse(kinds[1].url.match(/cookie\),\s*("[^"]+")/)[1]);
+  const discoverState = loaded.api.state.fromDataUri(loaded.context, encodedState);
+  assert.equal(discoverState.path, '/get_discover');
+  const responseUrl = loaded.api.explore.url(loaded.context, encodedState, 3);
+  const books = loaded.api.explore.list(loaded.context, hexBody(loaded.api.state.fromDataUri(loaded.context, responseUrl)));
+  assert.equal(books[0].name, 'SYNTHETIC_DISCOVER_BOOK');
+  assert.equal(loaded.api.state.fromDataUri(loaded.context, books[0].bookUrl).bookId, 'DISCOVER_BOOK_ID');
+});
