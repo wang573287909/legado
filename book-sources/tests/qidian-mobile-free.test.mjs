@@ -8,42 +8,73 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
 
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 const sourceFile = path.resolve(testDirectory, '..', 'qidian-mobile-free.json');
 const bookId = '1209977';
 const keyword = '斗破苍穹';
 const officialOrigin = 'https://m.qidian.com';
-const sensitiveHeaderName = /cookie|authorization|api[-_ ]?key|access[-_ ]?token|token/i;
+const allowedHeaderNames = ['Accept-Language', 'User-Agent'];
+const forbiddenIntegrationFields = ['loginUrl', 'loginUi', 'loginCheckJs', 'jsLib', 'proxy'];
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function collectAbsoluteHttpUrls(value, urls = []) {
+function collectWebUrls(value, urls = []) {
   if (typeof value === 'string') {
-    const matches = value.matchAll(/https?:\/\/[^\s"'`<>]+/gi);
+    const matches = value.matchAll(/(?:https?:)?\/\/[^\s"'`<>]+/gi);
     for (const match of matches) {
       urls.push(match[0]);
     }
   } else if (Array.isArray(value)) {
     for (const item of value) {
-      collectAbsoluteHttpUrls(item, urls);
+      collectWebUrls(item, urls);
     }
   } else if (value && typeof value === 'object') {
     for (const item of Object.values(value)) {
-      collectAbsoluteHttpUrls(item, urls);
+      collectWebUrls(item, urls);
     }
   }
   return urls;
 }
 
-function isOfficialHttpUrl(url) {
+function isOfficialWebUrl(url) {
   try {
-    return new URL(url).origin === officialOrigin;
+    return new URL(url, officialOrigin).origin === officialOrigin;
   } catch {
     return false;
   }
+}
+
+function getRuleContentScript(contentRule) {
+  const script = /^<js>\s*([\s\S]*?)\s*<\/js>$/.exec(contentRule);
+  assert.ok(script, '正文规则必须是完整的 <js> 脚本');
+  return script[1];
+}
+
+function makeChapterPage(chapterInfo, openingTag = '<script id="vite-plugin-ssr_pageContext">') {
+  return `${openingTag}${JSON.stringify({
+    pageContext: { pageProps: { pageData: { chapterInfo } } },
+  })}</script>`;
+}
+
+function runContentRuleHtml(contentRule, html) {
+  const messages = [];
+  const output = vm.runInNewContext(getRuleContentScript(contentRule), {
+    result: html,
+    java: {
+      longToast(message) {
+        messages.push(String(message));
+      },
+    },
+  });
+  return { output, messages };
+}
+
+function runContentRule(contentRule, chapterInfo, openingTag) {
+  return runContentRuleHtml(contentRule, makeChapterPage(chapterInfo, openingTag));
 }
 
 function getMetaContent(html, key, value) {
@@ -122,17 +153,59 @@ test('起点官方免费书源满足静态契约和实时四段链路', async (t
     assert.match(source.ruleContent.content, /chapterInfo\.vipStatus/);
     assert.match(source.ruleContent.content, /重要逻辑/);
     assert.ok(headers && typeof headers === 'object' && !Array.isArray(headers), '请求头必须是 JSON 对象');
-    assert.ok(
-      Object.keys(headers).every((name) => !sensitiveHeaderName.test(name)),
-      '请求头不得包含 Cookie、授权、API Key 或令牌类字段',
-    );
+    assert.deepEqual(Object.keys(headers).sort(), allowedHeaderNames, '请求头只能包含最小化的公开浏览器字段');
+    for (const field of forbiddenIntegrationFields) {
+      assert.ok(!(field in source), `书源不得定义 ${field} 登录、脚本库或代理字段`);
+    }
     // 重要逻辑：bookUrlPattern 是 URL 正则契约而不是可请求地址，不能按 URL origin 解析。
-    const absoluteUrls = collectAbsoluteHttpUrls(navigableSource);
+    const webUrls = collectWebUrls(navigableSource);
     assert.ok(
-      absoluteUrls.every(isOfficialHttpUrl),
-      '书源配置中的绝对 HTTP(S) 地址必须属于起点移动端官网',
+      webUrls.every(isOfficialWebUrl),
+      '书源配置中的 HTTP(S) 或协议相对地址必须属于起点移动端官网',
+    );
+    const maliciousSource = { ...navigableSource, searchUrl: '//evil.invalid/search' };
+    assert.ok(
+      !collectWebUrls(maliciousSource).every(isOfficialWebUrl),
+      '协议相对的第三方地址必须被 URL origin 校验拒绝',
     );
     assert.doesNotMatch(sourceText, /yckceo|langge|czyl|example\.com/i);
+  });
+
+  await t.test('正文执行规则只放行明确免费状态，并对结构变体失败关闭', () => {
+    const syntheticContent = '<p>synthetic public content</p>';
+    const freeCases = [0, '0'];
+    for (const vipStatus of freeCases) {
+      const { output, messages } = runContentRule(source.ruleContent.content, { vipStatus, content: syntheticContent });
+      assert.equal(output, syntheticContent, `vipStatus=${JSON.stringify(vipStatus)} 应返回正文`);
+      assert.deepEqual(messages, [], '明确免费状态不应提示读取失败');
+    }
+
+    const blockedCases = [
+      { label: 'vipStatus=1,isBuy=0', chapterInfo: { vipStatus: 1, isBuy: 0, content: syntheticContent } },
+      { label: 'vipStatus=1,isBuy=1', chapterInfo: { vipStatus: 1, isBuy: 1, content: syntheticContent } },
+      { label: 'vipStatus="1"', chapterInfo: { vipStatus: '1', content: syntheticContent } },
+      { label: 'missing vipStatus', chapterInfo: { content: syntheticContent } },
+      { label: 'vipStatus=null', chapterInfo: { vipStatus: null, content: syntheticContent } },
+      { label: 'vipStatus=""', chapterInfo: { vipStatus: '', content: syntheticContent } },
+      { label: 'vipStatus=unknown', chapterInfo: { vipStatus: 'unknown', content: syntheticContent } },
+    ];
+    for (const { label, chapterInfo } of blockedCases) {
+      const { output, messages } = runContentRule(source.ruleContent.content, chapterInfo);
+      assert.equal(output, '', `${label} 必须失败关闭`);
+      assert.ok(messages.length > 0, '失败关闭必须向用户提示官方阅读渠道或解析问题');
+      assert.ok(messages.every((message) => !message.includes(syntheticContent)), '失败路径不得记录正文');
+    }
+
+    const changedTag = '<SCRIPT data-page="chapter" id = \'vite-plugin-ssr_pageContext\' type="application/json">';
+    const { output, messages } = runContentRule(source.ruleContent.content, { vipStatus: 0, content: syntheticContent }, changedTag);
+    assert.equal(output, syntheticContent, '属性顺序、单双引号和等号空白变化的 script 标签仍应解析');
+    assert.deepEqual(messages, [], '可识别的结构变体不应触发失败提示');
+
+    const unclosedHtml = makeChapterPage({ vipStatus: 0, content: syntheticContent }).replace('</script>', '');
+    const unclosedResult = runContentRuleHtml(source.ruleContent.content, unclosedHtml);
+    assert.equal(unclosedResult.output, '', '缺少 script 闭合标签时必须失败关闭');
+    assert.ok(unclosedResult.messages.length > 0, '缺少 script 闭合标签时必须提示解析问题');
+    assert.ok(unclosedResult.messages.every((message) => !message.includes(syntheticContent)), '结构失败路径不得记录正文');
   });
 
   await t.test('搜索斗破苍穹返回原作', async () => {
