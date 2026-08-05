@@ -204,6 +204,42 @@ function response(status, body) {
   return { body() { return body; }, code() { return status; } };
 }
 
+test('列表直连传输构造活动节点 URL 并校验宿主原始响应', async () => {
+  const raw = await fixture('search');
+  const cache = makeCache();
+  cache.put('wsl_premium_aggregate:active_host', 'https://v4.czyl.cf');
+  const { api, context } = await loadRuntime(['config.js', 'state.js', 'transport.js'], { cache });
+
+  const direct = new URL(api.transport.url(context, '/search', {
+    title: 'A B', source: '来源/一', page: 2, disabled_sources: '0', omitted: null,
+  }));
+  assert.equal(direct.origin, 'https://v4.czyl.cf');
+  assert.equal(direct.pathname, '/search');
+  assert.equal(direct.searchParams.get('title'), 'A B');
+  assert.equal(direct.searchParams.get('source'), '来源/一');
+  assert.equal(direct.searchParams.get('page'), '2');
+  assert.equal(direct.searchParams.has('omitted'), false);
+  assert.throws(() => api.transport.url(context, 'https://external.invalid/search', {}), /服务路径无效/);
+  assert.throws(() => api.transport.url(context, '//external.invalid/search', {}), /服务路径无效/);
+
+  const parsed = api.transport.parseRead(context, '/search', JSON.stringify(raw));
+  assert.deepEqual(JSON.parse(JSON.stringify(parsed)), raw);
+  // 空 `data` 且 has_more=false 是合法到底页，不应与响应结构损坏混同。
+  const empty = { code: 0, data: [], has_more: false };
+  assert.deepEqual(JSON.parse(JSON.stringify(
+    api.transport.parseRead(context, '/search', JSON.stringify(empty)),
+  )), empty);
+  assert.throws(() => api.transport.parseRead(context, '/search', '<html>bad</html>'), /响应不是 JSON/);
+  assert.throws(() => api.transport.parseRead(context, '/search', '{"data":[]}'), /响应 code 无效/);
+  // 端点校验继续拒绝与当前书源不一致的媒体类型。
+  assert.throws(() => api.transport.parseRead(context, '/search', JSON.stringify({
+    code: 0, data: [{ book_id: 'BOOK_ID', source: 'SYNTHETIC_SOURCE', tab: '听书' }],
+  })), /书籍列表字段无效/);
+  assert.throws(() => api.transport.parseRead(context, '/search', JSON.stringify({
+    code: -1, msg: 'SYNTHETIC_BUSINESS_ERROR', data: null,
+  })), /SYNTHETIC_BUSINESS_ERROR/);
+});
+
 test('只读传输在 5xx 后切换并粘住成功节点', async () => {
   const calls = [];
   const java = makeJava((spec) => {

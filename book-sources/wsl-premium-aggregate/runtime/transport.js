@@ -12,6 +12,15 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
       return encodeURIComponent(key) + '=' + encodeURIComponent(String(query[key]));
     }).join('&');
   }
+  function servicePath(path) {
+    var value = String(path || '');
+    if (value.charAt(0) !== '/' || value.substring(0, 2) === '//' ||
+        value.indexOf('://') >= 0 || value.indexOf('?') >= 0 || value.indexOf('#') >= 0 ||
+        /[\r\n]/.test(value)) {
+      throw new Error('服务路径无效');
+    }
+    return value;
+  }
   function health(ctx) {
     try { return JSON.parse(String(ctx.cache.get(HEALTH_KEY) || '{}')); } catch (error) { return {}; }
   }
@@ -155,7 +164,7 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
     return '';
   }
   function request(ctx, method, path, query, body, mutating) {
-    if (String(path).charAt(0) !== '/' || String(path).indexOf('://') >= 0) throw new Error('服务路径无效');
+    path = servicePath(path);
     var hosts = candidates(ctx, mutating);
     var lastError = null;
     for (var index = 0; index < hosts.length; index += 1) {
@@ -200,13 +209,37 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
     }
     return envelope;
   }
+  function currentHost(ctx) {
+    var hosts = api.config.hosts(ctx);
+    var active = String(ctx.cache.get(ACTIVE_KEY) || '');
+    if (active && hosts.indexOf(active) >= 0) return active;
+    if (!hosts.length) throw new Error('没有可用服务节点');
+    return String(hosts[0]);
+  }
+  function buildUrl(ctx, path, query) {
+    var safePath = servicePath(path);
+    var qs = queryString(query || {});
+    // 重要逻辑：搜索与榜单只返回真实网络 URL，让 Legado 获取响应体，避免跨 Rhino 作用域传递内存键。
+    return currentHost(ctx) + safePath + (qs ? '?' + qs : '');
+  }
+  function parseRead(ctx, path, body) {
+    var safePath = servicePath(path);
+    // 重要逻辑：列表规则只接收宿主在成功 HTTP 请求后提供的正文；连接和 HTTP 状态错误已由宿主网络层处理。
+    var envelope = parseEnvelope(currentHost(ctx), 200, body);
+    if (envelope.retryable) throw new Error(envelope.message);
+    var invalid = envelope.ok ? schemaError(ctx, safePath, envelope) : '';
+    if (invalid) throw new Error(invalid);
+    return requireSuccess(ctx, envelope).raw;
+  }
 
   api.transport = {
+    url: buildUrl,
+    parseRead: parseRead,
     read: function (ctx, path, query) { return request(ctx, 'GET', path, query || {}, null, false); },
     postRead: function (ctx, path, query, body) { return request(ctx, 'POST', path, query || {}, body, false); },
     write: function (ctx, path, body) { return request(ctx, 'POST', path, {}, body, true); },
     requireSuccess: requireSuccess,
-    currentHost: function (ctx) { return String(ctx.cache.get(ACTIVE_KEY) || api.config.hosts(ctx)[0]); },
+    currentHost: currentHost,
     clearHealth: function (ctx) { ctx.cache.delete(ACTIVE_KEY); ctx.cache.delete(HEALTH_KEY); }
   };
 })(WSLPA);
