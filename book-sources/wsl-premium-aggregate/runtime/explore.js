@@ -72,7 +72,7 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
     return api.transport.url(ctx, state.path, query);
   }
   function response(ctx, body) {
-    // 重要逻辑：动态栏目状态仍自包含在 data URL 中，但大型书单正文直接来自当前 HTTPS 请求。
+    // 重要逻辑：动态栏目状态仍自包含在 data URL 中，但大型书单正文直接来自当前列表请求。
     return api.transport.parseRead(ctx, '/get_discover', body);
   }
   function list(ctx, body) {

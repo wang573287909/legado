@@ -51,7 +51,7 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
     });
   }
   function response(ctx, body) {
-    // 重要逻辑：列表正文来自 Legado 的实际 HTTPS 请求，不读取任何前一 Rhino 作用域中的响应暂存。
+    // 重要逻辑：列表正文来自 Legado 的实际网络请求，不读取任何前一 Rhino 作用域中的响应暂存。
     return api.transport.parseRead(ctx, '/search', body);
   }
   function list(ctx, body) {
