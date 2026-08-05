@@ -465,7 +465,7 @@ test('目录保持服务端顺序并映射卷、VIP 与章节状态', async () =
   assert.equal(loaded.api.state.fromDataUri(loaded.context, chapters[1].chapterUrl).itemId, 'ITEM_ID');
 });
 
-test('发现栏目丢弃占位项、改写节点 origin 并复用书籍映射', async () => {
+test('发现栏目返回活动节点 HTTPS 并在独立运行时解析原始响应', async () => {
   const style = await fixture('discover-style');
   style.data[1].url = 'https://v10.czyl.cf/get_discover?source=A+B&tab=小说&page={{page}}';
   style.data.push({
@@ -477,29 +477,42 @@ test('发现栏目丢弃占位项、改写节点 origin 并复用书籍映射', 
     style: { layout_flexBasisPercent: 0.5 },
   });
   const listing = await fixture('discover-list');
-  const loaded = await loadRuntime(['config.js', 'state.js', 'transport.js', 'search.js', 'explore.js']);
-  loaded.api.transport.read = (_ctx, pathName) => ({
+  const cache = makeCache();
+  cache.put('wsl_premium_aggregate:active_host', 'https://v4.czyl.cf');
+  const first = await loadRuntime(['config.js', 'state.js', 'transport.js', 'search.js', 'explore.js'], { cache });
+  first.api.transport.read = (_ctx, pathName) => ({
     ok: true,
     data: pathName === '/discovestyle' ? style.data : listing.data,
     raw: pathName === '/discovestyle' ? style : listing,
   });
-  const kinds = JSON.parse(loaded.api.explore.kinds(loaded.context));
+  const kinds = JSON.parse(first.api.explore.kinds(first.context));
   assert.deepEqual(kinds.map((kind) => kind.title), ['排行榜', '推荐榜']);
   assert.equal(kinds[0].type, 'title');
-  // 重要逻辑：普通发现分类沿用示例协议，省略 type 后由宿主按可点击链接处理；text 在部分版本会打开输入控件。
+  // 重要逻辑：普通发现分类省略 type 才会由宿主作为可点击链接打开；text 会被部分版本渲染为输入框。
   assert.equal(Object.hasOwn(kinds[1], 'type'), false);
   assert.equal(kinds[1].style.cols, 4);
   assert.doesNotMatch(kinds[1].url, /v10\.czyl\.cf/);
 
-  // 状态 URL 末尾的 Legado 选项会引入转义引号，按完整 JavaScript 字符串语法提取。
   const encodedState = JSON.parse(kinds[1].url.match(/cookie\),\s*("(?:\\.|[^"\\])*")\s*,\s*page/)[1]);
-  const discoverState = loaded.api.state.fromDataUri(loaded.context, encodedState);
+  const discoverState = first.api.state.fromDataUri(first.context, encodedState);
   assert.equal(discoverState.path, '/get_discover');
   assert.equal(discoverState.query.source, 'A B');
-  const responseUrl = loaded.api.explore.url(loaded.context, encodedState, 3);
-  const books = loaded.api.explore.list(loaded.context, hexBody(loaded.api.state.fromDataUri(loaded.context, responseUrl)));
+  const responseUrl = first.api.explore.url(first.context, encodedState, 3);
+  const direct = new URL(responseUrl);
+  assert.equal(direct.origin, 'https://v4.czyl.cf');
+  assert.equal(direct.pathname, '/get_discover');
+  assert.equal(direct.searchParams.get('source'), 'A B');
+  assert.equal(direct.searchParams.get('page'), '3');
+  assert.equal(Object.keys(first.api.responseStashes).length, 0);
+
+  // 重要逻辑：榜单解析在新的 vm 上下文中只消费服务器 JSON，验证弱引用作用域重建不会丢书单。
+  const second = await loadRuntime(['config.js', 'state.js', 'transport.js', 'search.js', 'explore.js'], { cache });
+  const books = second.api.explore.list(second.context, JSON.stringify(listing));
   assert.equal(books[0].name, 'SYNTHETIC_DISCOVER_BOOK');
-  assert.equal(loaded.api.state.fromDataUri(loaded.context, books[0].bookUrl).bookId, 'DISCOVER_BOOK_ID');
+  assert.equal(second.api.state.fromDataUri(second.context, books[0].bookUrl).bookId, 'DISCOVER_BOOK_ID');
+  assert.equal(second.api.explore.hasMore(second.context, JSON.stringify(listing)), true);
+  assert.equal(second.api.explore.hasMore(second.context, JSON.stringify({ ...listing, has_more: false })), false);
+  assert.equal(Object.keys(second.api.responseStashes).length, 0);
 });
 
 test('Legado 顶层 @js 包装器可以作为 Rhino 脚本直接编译', async () => {

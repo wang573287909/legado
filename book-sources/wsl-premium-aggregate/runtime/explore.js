@@ -69,10 +69,12 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
     if (state.kind !== 'discover') throw new Error('发现栏目状态类型无效');
     var query = state.query || {};
     query.page = Number(page || 1);
-    var envelope = api.transport.requireSuccess(ctx, api.transport.read(ctx, state.path, query));
-    return api.state.stash(ctx, envelope.raw);
+    return api.transport.url(ctx, state.path, query);
   }
-  function response(ctx, body) { return api.state.readStashFromBody(ctx, body); }
+  function response(ctx, body) {
+    // 重要逻辑：动态栏目状态仍自包含在 data URL 中，但大型书单正文直接来自当前 HTTPS 请求。
+    return api.transport.parseRead(ctx, '/get_discover', body);
+  }
   function list(ctx, body) {
     var raw = response(ctx, body);
     if (!Array.isArray(raw.data)) throw new Error('发现列表 data 不是数组');
