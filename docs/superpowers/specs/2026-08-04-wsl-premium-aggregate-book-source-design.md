@@ -236,7 +236,7 @@ wsl_premium_aggregate:sync_throttle
 
 ## 8. 状态编码与数据模型
 
-搜索结果的 `bookUrl` 和目录条目的 `chapterUrl` 使用 `data:;base64,` 状态 URL，避免向虚构网页发送请求。
+搜索、发现、书籍、目录、正文和评论的内部状态使用 `data:application/json;base64,...,{"type":"wslpa"}` URL。`type` 是宿主的本地字节解码标记：Legado-E 只在该选项存在时从 `data:` 直接取数据，避免将状态地址交给 OkHttp。书源内部解码状态时会先分离逗号后的 Legado URL 选项。
 
 书籍状态：
 

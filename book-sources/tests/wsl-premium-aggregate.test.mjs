@@ -120,8 +120,15 @@ test('状态 URL 往返并拒绝敏感键、超长值和未知版本', async () 
   const { api, context } = await loadRuntime(['config.js', 'state.js']);
   const state = { v: 1, kind: 'book', bookId: 'BOOK_ID', source: 'SYNTHETIC_SOURCE', tab: '小说' };
   const url = api.state.toDataUri(context, state);
-  assert.match(url, /^data:application\/json;base64,/);
+  const bareUrl = `data:application/json;base64,${context.java.base64Encode(JSON.stringify(state))}`;
+  assert.equal(url, `${bareUrl},{"type":"wslpa"}`);
+  // 重要逻辑：模拟 Legado AnalyzeUrl.paramPattern 分割，确认 data: 与宿主 URL 选项各自完整。
+  const optionMarker = /\s*,\s*(?=\{)/;
+  const marker = optionMarker.exec(url);
+  assert.equal(url.substring(0, marker.index), bareUrl);
+  assert.deepEqual(JSON.parse(url.substring(marker.index + marker[0].length)), { type: 'wslpa' });
   assert.deepEqual(JSON.parse(JSON.stringify(api.state.fromDataUri(context, url))), state);
+  assert.deepEqual(JSON.parse(JSON.stringify(api.state.fromDataUri(context, bareUrl))), state);
   assert.throws(() => api.state.toDataUri(context, { ...state, token: 'SECRET' }), /敏感字段/);
   assert.throws(() => api.state.toDataUri(context, { ...state, v: 2 }), /状态版本/);
   assert.throws(() => api.state.toDataUri(context, { ...state, title: 'x'.repeat(9000) }), /状态过长/);
@@ -422,7 +429,8 @@ test('发现栏目丢弃占位项、改写节点 origin 并复用书籍映射', 
   assert.equal(kinds[1].style.cols, 4);
   assert.doesNotMatch(kinds[1].url, /v10\.czyl\.cf/);
 
-  const encodedState = JSON.parse(kinds[1].url.match(/cookie\),\s*("[^"]+")/)[1]);
+  // 状态 URL 末尾的 Legado 选项会引入转义引号，按完整 JavaScript 字符串语法提取。
+  const encodedState = JSON.parse(kinds[1].url.match(/cookie\),\s*("(?:\\.|[^"\\])*")\s*,\s*page/)[1]);
   const discoverState = loaded.api.state.fromDataUri(loaded.context, encodedState);
   assert.equal(discoverState.path, '/get_discover');
   assert.equal(discoverState.query.source, 'A B');
@@ -474,10 +482,10 @@ test('榜单控件修复版更换发现栏目缓存键并保持包装器返回�
   assert.deepEqual(kinds.map((kind) => kind.title), ['排行榜', '推荐榜']);
 });
 
-test('榜单控件修复版递增更新时间以便 Legado 默认选中覆盖更新', async () => {
+test('兼容修复版递增更新时间以便 Legado 默认选中覆盖更新', async () => {
   const sources = await jsonFile(outputFile);
-  const previousTextControlVersion = 1785899166250;
-  assert.ok(sources.every((source) => source.lastUpdateTime > previousTextControlVersion));
+  const previousBareDataUrlVersion = 1785901109310;
+  assert.ok(sources.every((source) => source.lastUpdateTime > previousBareDataUrlVersion));
   assert.equal(new Set(sources.map((source) => source.lastUpdateTime)).size, 1);
 });
 

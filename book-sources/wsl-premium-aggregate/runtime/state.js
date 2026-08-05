@@ -2,6 +2,7 @@
 var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
 (function (api) {
   var PREFIX = 'data:application/json;base64,';
+  var URL_OPTION = ',{"type":"wslpa"}';
   var STASH_PREFIX = 'wsl-response:';
   var STASH_TTL_MS = 5 * 60 * 1000;
   var STASH_LIMIT = 32;
@@ -93,12 +94,17 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
     })(value);
     return json;
   }
-  function toDataUri(ctx, value) { return PREFIX + ctx.java.base64Encode(validate(value)); }
+  function toDataUri(ctx, value) {
+    // 重要逻辑：type 是 Legado-E 把 data: 分派到本地字节解码的标记，避免误交给 OkHttp。
+    return PREFIX + ctx.java.base64Encode(validate(value)) + URL_OPTION;
+  }
   function fromDataUri(ctx, url) {
     var text = String(url);
     var marker = text.indexOf(';base64,');
     if (marker < 0) throw new Error('状态 URL 格式无效');
     var payload = text.substring(marker + 8).split('?')[0];
+    // Base64 字母表不含逗号，因此可在这里稳定分离 Legado URL 选项。
+    if (payload.indexOf(',') >= 0) payload = payload.substring(0, payload.indexOf(','));
     var value = JSON.parse(ctx.java.base64Decode(payload));
     validate(value);
     return value;
