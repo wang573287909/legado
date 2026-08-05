@@ -168,7 +168,7 @@ Expected: FAIL，错误包含 `api.transport.url is not a function`。
   }
   function parseRead(ctx, path, body) {
     var safePath = servicePath(path);
-    // 重要逻辑：列表规则只接收宿主在成功 HTTP 请求后提供的正文；连接和 HTTP 状态错误已由宿主网络层处理。
+    // 重要逻辑：列表规则只接收宿主提供的正文而不暴露 HTTP 状态；这里依靠服务端 code 信封和端点字段校验判定成功。
     var envelope = parseEnvelope(currentHost(ctx), 200, body);
     if (envelope.retryable) throw new Error(envelope.message);
     var invalid = envelope.ok ? schemaError(ctx, safePath, envelope) : '';

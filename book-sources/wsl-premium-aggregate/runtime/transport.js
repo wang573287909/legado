@@ -45,6 +45,16 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
     hosts = available.length ? available : hosts.slice(0, 1);
     return mutating ? hosts.slice(0, 1) : hosts;
   }
+  function parseCode(value) {
+    var parsed;
+    // 重要逻辑：只接受有限数值或严格十进制整数字符串，避免 Number 接纳布尔值、十六进制和小数文本。
+    if (typeof value === 'number') return isFinite(value) ? value : null;
+    if (typeof value !== 'string') return null;
+    value = value.trim();
+    if (!/^-?\d+$/.test(value)) return null;
+    parsed = Number(value);
+    return isFinite(parsed) ? parsed : null;
+  }
   function parseEnvelope(host, status, text) {
     if (status >= 500) return { retryable: true, message: 'HTTP ' + status };
     var parsed;
@@ -61,20 +71,22 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
     }
     if (status >= 400) {
       var errorEnvelope = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+      var errorCode = parseCode(errorEnvelope.code);
       return {
-        ok: false, business: true, code: errorEnvelope.code === undefined ? status : errorEnvelope.code,
+        ok: false, business: true, code: errorCode === null ? status : errorCode,
         message: String(errorEnvelope.msg || errorEnvelope.error || ('HTTP ' + status)),
         data: errorEnvelope.data, host: host, raw: parsed
       };
     }
+    var code = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parseCode(parsed.code) : null;
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
         !Object.prototype.hasOwnProperty.call(parsed, 'code') ||
-        parsed.code === null || String(parsed.code).trim() === '' || !isFinite(Number(parsed.code))) {
+        code === null) {
       return { retryable: true, message: '响应 code 无效' };
     }
-    if (Number(parsed.code) !== 0) {
+    if (code !== 0) {
       return {
-        ok: false, business: true, code: Number(parsed.code),
+        ok: false, business: true, code: code,
         message: String(parsed.msg || parsed.error || '服务返回业务错误'),
         data: parsed.data, host: host, raw: parsed
       };
@@ -85,7 +97,16 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
     };
   }
   function object(value) { return !!value && typeof value === 'object' && !Array.isArray(value); }
+  function own(value, key) { return Object.prototype.hasOwnProperty.call(value, key); }
   function clean(value) { return value === undefined || value === null ? '' : String(value).trim(); }
+  function scalarId(value) {
+    // 重要逻辑：书籍 ID 只允许非空文本或有限数值，避免布尔值、对象被 String 强制转换后混入协议。
+    return (typeof value === 'string' && value.trim() !== '') ||
+      (typeof value === 'number' && isFinite(value));
+  }
+  function nonemptyString(value) {
+    return typeof value === 'string' && value.trim() !== '';
+  }
   function httpUrl(value) { return /^https?:\/\/[^\s]+$/i.test(clean(value)); }
   function novelReadable(value) {
     var html = clean(value)
@@ -101,18 +122,20 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
     return safeImage || !!text;
   }
   function mediaMatches(ctx, item) {
-    return !item.tab || String(item.tab).trim() === api.config.media(ctx);
+    // 重要逻辑：tab 缺失兼容历史接口；一旦返回则必须是当前媒体的有效文本，不能依赖隐式转换。
+    return !own(item, 'tab') || (typeof item.tab === 'string' && item.tab.trim() === api.config.media(ctx));
   }
   function booksValid(ctx, data) {
     if (!Array.isArray(data)) return false;
     return data.every(function (item) {
-      return object(item) && item.book_id !== undefined && String(item.book_id).trim() &&
-        item.source !== undefined && String(item.source).trim() && mediaMatches(ctx, item);
+      return object(item) && scalarId(item.book_id) && nonemptyString(item.source) && mediaMatches(ctx, item);
     });
   }
   function schemaError(ctx, path, envelope) {
     if (path === '/search' || path === '/get_discover') {
-      return booksValid(ctx, envelope.data) ? '' : '书籍列表字段无效';
+      // 重要逻辑：分页字段若存在必须为布尔值，防止对象等值在下游被当作真值误判为还有下一页。
+      return booksValid(ctx, envelope.data) && (!own(envelope.raw, 'has_more') ||
+        typeof envelope.raw.has_more === 'boolean') ? '' : '书籍列表字段无效';
     }
     if (path === '/detail') {
       var detail = envelope.data || {};
@@ -223,7 +246,7 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
   }
   function parseRead(ctx, path, body) {
     var safePath = servicePath(path);
-    // 重要逻辑：列表规则只接收宿主在成功 HTTP 请求后提供的正文；连接和 HTTP 状态错误已由宿主网络层处理。
+    // 重要逻辑：列表规则只接收宿主提供的正文而不暴露 HTTP 状态；这里依靠服务端 code 信封和端点字段校验判定成功。
     var envelope = parseEnvelope(currentHost(ctx), 200, body);
     if (envelope.retryable) throw new Error(envelope.message);
     var invalid = envelope.ok ? schemaError(ctx, safePath, envelope) : '';

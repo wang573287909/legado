@@ -250,6 +250,54 @@ test('列表直连传输构造活动节点 URL 并校验宿主原始响应', asy
   })), /SYNTHETIC_BUSINESS_ERROR/);
 });
 
+test('列表直连拒绝强制转换型 code、书籍字段和分页字段', async () => {
+  const { api, context } = await loadRuntime(['config.js', 'state.js', 'transport.js']);
+  const invalidCases = [
+    { label: 'boolean false code', body: { code: false, data: [] }, error: /响应 code 无效/ },
+    { label: 'boolean true code', body: { code: true, data: [] }, error: /响应 code 无效/ },
+    { label: 'decimal string code', body: { code: '0.0', data: [] }, error: /响应 code 无效/ },
+    { label: 'explicit plus string code', body: { code: '+0', data: [] }, error: /响应 code 无效/ },
+    { label: 'hexadecimal string code', body: { code: '0x0', data: [] }, error: /响应 code 无效/ },
+    {
+      label: 'boolean book id',
+      body: { code: 0, data: [{ book_id: false, source: 'SYNTHETIC_SOURCE', tab: '小说' }] },
+      error: /书籍列表字段无效/,
+    },
+    {
+      label: 'object book id',
+      body: { code: 0, data: [{ book_id: {}, source: 'SYNTHETIC_SOURCE', tab: '小说' }] },
+      error: /书籍列表字段无效/,
+    },
+    {
+      label: 'object source',
+      body: { code: 0, data: [{ book_id: 'BOOK_ID', source: {}, tab: '小说' }] },
+      error: /书籍列表字段无效/,
+    },
+    {
+      label: 'boolean tab',
+      body: { code: 0, data: [{ book_id: 'BOOK_ID', source: 'SYNTHETIC_SOURCE', tab: false }] },
+      error: /书籍列表字段无效/,
+    },
+    { label: 'object has more', body: { code: 0, data: [], has_more: {} }, error: /书籍列表字段无效/ },
+  ];
+
+  invalidCases.forEach(({ label, body, error }) => {
+    assert.throws(() => api.transport.parseRead(context, '/search', JSON.stringify(body)), error, label);
+  });
+
+  const empty = { code: ' 0 ', data: [], has_more: false };
+  assert.deepEqual(JSON.parse(JSON.stringify(
+    api.transport.parseRead(context, '/search', JSON.stringify(empty)),
+  )), empty);
+  const numericBookId = {
+    code: 0,
+    data: [{ book_id: 123, source: 'SYNTHETIC_SOURCE', tab: '小说' }],
+  };
+  assert.deepEqual(JSON.parse(JSON.stringify(
+    api.transport.parseRead(context, '/search', JSON.stringify(numericBookId)),
+  )), numericBookId);
+});
+
 test('只读传输在 5xx 后切换并粘住成功节点', async () => {
   const calls = [];
   const java = makeJava((spec) => {
