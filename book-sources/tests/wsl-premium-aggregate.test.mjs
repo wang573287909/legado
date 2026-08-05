@@ -544,11 +544,12 @@ test('Legado 顶层 @js 包装器可以作为 Rhino 脚本直接编译', async (
   }
 });
 
-test('榜单控件修复版更换发现栏目缓存键并保持包装器返回值', async () => {
+test('列表直连修复版更换发现栏目缓存键并保持包装器返回值', async () => {
   const [source] = await jsonFile(outputFile);
-  const staleExploreUrl = '@js:WSLPA.explore.kinds(WSLPA.ctx(java, source, cache, cookie));';
-  // 重要逻辑：Legado 用 bookSourceUrl + exploreUrl 缓存发现栏目；更换包装器文本可避开已持久化的 text 控件列表。
+  const staleExploreUrl = '@js:WSLPA.explore.kinds(WSLPA.ctx(java, source, cache, cookie));/*发现榜单缓存-v2*/';
+  // 重要逻辑：Legado 用 bookSourceUrl + exploreUrl 缓存发现栏目；v3 强制丢弃仍会返回内存响应键的旧动态链接。
   assert.notEqual(source.exploreUrl, staleExploreUrl);
+  assert.match(source.exploreUrl, /发现榜单缓存-v3/);
 
   const style = await fixture('discover-style');
   const loaded = await loadRuntime(['config.js', 'state.js', 'transport.js', 'search.js', 'explore.js']);
@@ -557,10 +558,10 @@ test('榜单控件修复版更换发现栏目缓存键并保持包装器返回�
   assert.deepEqual(kinds.map((kind) => kind.title), ['排行榜', '推荐榜']);
 });
 
-test('兼容修复版递增更新时间以便 Legado 默认选中覆盖更新', async () => {
+test('列表直连版本递增更新时间以便 Legado 默认选中覆盖更新', async () => {
   const sources = await jsonFile(outputFile);
-  const previousBareDataUrlVersion = 1785901109310;
-  assert.ok(sources.every((source) => source.lastUpdateTime > previousBareDataUrlVersion));
+  const previousResponseStashVersion = 1785902874675;
+  assert.ok(sources.every((source) => source.lastUpdateTime > previousResponseStashVersion));
   assert.equal(new Set(sources.map((source) => source.lastUpdateTime)).size, 1);
 });
 
