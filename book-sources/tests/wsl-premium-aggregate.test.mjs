@@ -461,9 +461,22 @@ test('Legado 顶层 @js 包装器可以作为 Rhino 脚本直接编译', async (
   }
 });
 
+test('榜单控件修复版更换发现栏目缓存键并保持包装器返回值', async () => {
+  const [source] = await jsonFile(outputFile);
+  const staleExploreUrl = '@js:WSLPA.explore.kinds(WSLPA.ctx(java, source, cache, cookie));';
+  // 重要逻辑：Legado 用 bookSourceUrl + exploreUrl 缓存发现栏目；更换包装器文本可避开已持久化的 text 控件列表。
+  assert.notEqual(source.exploreUrl, staleExploreUrl);
+
+  const style = await fixture('discover-style');
+  const loaded = await loadRuntime(['config.js', 'state.js', 'transport.js', 'search.js', 'explore.js']);
+  loaded.api.transport.read = () => ({ ok: true, data: style.data, raw: style });
+  const kinds = JSON.parse(vm.runInContext(source.exploreUrl.slice(4), loaded.context));
+  assert.deepEqual(kinds.map((kind) => kind.title), ['排行榜', '推荐榜']);
+});
+
 test('榜单控件修复版递增更新时间以便 Legado 默认选中覆盖更新', async () => {
   const sources = await jsonFile(outputFile);
-  const previousTextControlVersion = 1785891600000;
+  const previousTextControlVersion = 1785899166250;
   assert.ok(sources.every((source) => source.lastUpdateTime > previousTextControlVersion));
   assert.equal(new Set(sources.map((source) => source.lastUpdateTime)).size, 1);
 });
