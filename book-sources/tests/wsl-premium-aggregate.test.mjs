@@ -210,6 +210,10 @@ test('列表直连传输构造活动节点 URL 并校验宿主原始响应', asy
   cache.put('wsl_premium_aggregate:active_host', 'https://v4.czyl.cf');
   const { api, context } = await loadRuntime(['config.js', 'state.js', 'transport.js'], { cache });
 
+  cache.put('wsl_premium_aggregate:active_host', 'https://external.invalid');
+  assert.equal(new URL(api.transport.url(context, '/search', {})).origin, 'https://v10.czyl.cf');
+  cache.put('wsl_premium_aggregate:active_host', 'https://v4.czyl.cf');
+
   const direct = new URL(api.transport.url(context, '/search', {
     title: 'A B', source: '来源/一', page: 2, disabled_sources: '0', omitted: null,
   }));
@@ -221,6 +225,12 @@ test('列表直连传输构造活动节点 URL 并校验宿主原始响应', asy
   assert.equal(direct.searchParams.has('omitted'), false);
   assert.throws(() => api.transport.url(context, 'https://external.invalid/search', {}), /服务路径无效/);
   assert.throws(() => api.transport.url(context, '//external.invalid/search', {}), /服务路径无效/);
+  assert.throws(() => api.transport.url(context, '/search,{"method":"POST"}', {}), /服务路径无效/);
+  assert.throws(() => api.transport.read(context, '/search,{"method":"POST"}', {}), /服务路径无效/);
+  const optionLikeQuery = new URL(api.transport.url(context, '/search', {
+    title: ',{"method":"POST"}&x=y',
+  }));
+  assert.equal(optionLikeQuery.searchParams.get('title'), ',{"method":"POST"}&x=y');
 
   const parsed = api.transport.parseRead(context, '/search', JSON.stringify(raw));
   assert.deepEqual(JSON.parse(JSON.stringify(parsed)), raw);

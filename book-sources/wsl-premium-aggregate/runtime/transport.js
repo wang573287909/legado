@@ -14,9 +14,8 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
   }
   function servicePath(path) {
     var value = String(path || '');
-    if (value.charAt(0) !== '/' || value.substring(0, 2) === '//' ||
-        value.indexOf('://') >= 0 || value.indexOf('?') >= 0 || value.indexOf('#') >= 0 ||
-        /[\r\n]/.test(value)) {
+    // 重要逻辑：正向字符集同时阻断 Legado URL-option 分隔符和路径规范化绕过。
+    if (!/^\/(?:[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*)?$/.test(value)) {
       throw new Error('服务路径无效');
     }
     return value;
