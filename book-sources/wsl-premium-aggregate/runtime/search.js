@@ -45,13 +45,15 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
   }
   function url(ctx, keyword, page) {
     var query = parse(keyword);
-    var envelope = api.transport.requireSuccess(ctx, api.transport.read(ctx, '/search', {
+    return api.transport.url(ctx, '/search', {
       title: query.title, tab: api.config.media(ctx), source: query.upstream,
       page: Number(page || 1), disabled_sources: '0'
-    }));
-    return api.state.stash(ctx, envelope.raw);
+    });
   }
-  function response(ctx, body) { return api.state.readStashFromBody(ctx, body); }
+  function response(ctx, body) {
+    // 重要逻辑：列表正文来自 Legado 的实际 HTTPS 请求，不读取任何前一 Rhino 作用域中的响应暂存。
+    return api.transport.parseRead(ctx, '/search', body);
+  }
   function list(ctx, body) {
     var raw = response(ctx, body);
     if (!Array.isArray(raw.data)) throw new Error('搜索响应 data 不是数组');

@@ -403,21 +403,37 @@ function hexBody(value) {
   return Buffer.from(typeof value === 'string' ? value : JSON.stringify(value), 'utf8').toString('hex');
 }
 
-test('搜索语法支持来源后缀和 @@ 转义，并保留同名不同来源', async () => {
+test('搜索返回 HTTPS 且独立运行时直接解析原始响应', async () => {
   const raw = await fixture('search');
   raw.data.push({ ...raw.data[0], source: 'SECOND_SOURCE', book_id: 'SECOND_ID' });
-  const loaded = await loadRuntime(['config.js', 'state.js', 'transport.js', 'search.js']);
-  loaded.api.transport.read = () => ({ ok: true, data: raw.data, raw });
+  const cache = makeCache();
+  cache.put('wsl_premium_aggregate:active_host', 'https://v4.czyl.cf');
+  const first = await loadRuntime(['config.js', 'state.js', 'transport.js', 'search.js'], { cache });
 
-  assert.deepEqual(JSON.parse(JSON.stringify(loaded.api.search.parse('A@@B@SOURCE_X'))), {
+  assert.deepEqual(JSON.parse(JSON.stringify(first.api.search.parse('A@@B@SOURCE_X'))), {
     title: 'A@B', upstream: 'SOURCE_X',
   });
-  const responseUrl = loaded.api.search.url(loaded.context, 'A@@B@SOURCE_X', 2);
-  const books = loaded.api.search.list(loaded.context, hexBody(loaded.api.state.fromDataUri(loaded.context, responseUrl)));
+  const searchUrl = first.api.search.url(first.context, 'A@@B@SOURCE_X', 2);
+  const direct = new URL(searchUrl);
+  assert.equal(direct.origin, 'https://v4.czyl.cf');
+  assert.equal(direct.pathname, '/search');
+  assert.equal(direct.searchParams.get('title'), 'A@B');
+  assert.equal(direct.searchParams.get('source'), 'SOURCE_X');
+  assert.equal(direct.searchParams.get('tab'), '小说');
+  assert.equal(direct.searchParams.get('page'), '2');
+  assert.equal(direct.searchParams.get('disabled_sources'), '0');
+  assert.equal(Object.keys(first.api.responseStashes).length, 0);
+
+  // 重要逻辑：第二个 vm 上下文模拟 SharedJsScope 被回收；这里只提供 HTTP 原始正文，不共享 WSLPA 内存。
+  const second = await loadRuntime(['config.js', 'state.js', 'transport.js', 'search.js'], { cache });
+  const books = second.api.search.list(second.context, JSON.stringify(raw));
   assert.equal(books.length, 2);
   assert.notEqual(books[0].bookUrl, books[1].bookUrl);
-  assert.equal(loaded.api.state.fromDataUri(loaded.context, books[0].bookUrl).bookId, 'BOOK_ID');
-  assert.throws(() => loaded.api.search.parse('   '), /关键词为空/);
+  assert.equal(second.api.state.fromDataUri(second.context, books[0].bookUrl).bookId, 'BOOK_ID');
+  assert.equal(second.api.search.hasMore(second.context, JSON.stringify(raw)), true);
+  assert.equal(second.api.search.hasMore(second.context, JSON.stringify({ ...raw, has_more: false })), false);
+  assert.equal(Object.keys(second.api.responseStashes).length, 0);
+  assert.throws(() => second.api.search.parse('   '), /关键词为空/);
 });
 
 test('详情用搜索种子回退空字段并生成同一书籍状态的目录 URL', async () => {
