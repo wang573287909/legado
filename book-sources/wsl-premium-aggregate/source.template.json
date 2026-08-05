@@ -9,14 +9,14 @@
     "enableDangerousApi": false,
     "concurrentRate": "1/1000",
     "header": "{\"User-Agent\":\"Mozilla/5.0 (Linux; Android 13; Legado WSL Source) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36\",\"Accept\":\"application/json,text/html;q=0.9,*/*;q=0.8\"}",
-    "loginUi": "@js:return WSLPA.auth.ui(WSLPA.ctx(java, source, cache, cookie));",
+    "loginUi": "@js:WSLPA.auth.ui(WSLPA.ctx(java, source, cache, cookie));",
     "loginCheckJs": null,
     "respondTime": 180000,
     "weight": 0,
-    "lastUpdateTime": 1785772800000,
+    "lastUpdateTime": 1785891600000,
     "variableComment": "在登录面板统一设置节点、发现频道、书架同步、评论和明文末级节点。",
-    "exploreUrl": "@js:return WSLPA.explore.kinds(WSLPA.ctx(java, source, cache, cookie));",
-    "searchUrl": "@js:return WSLPA.search.url(WSLPA.ctx(java, source, cache, cookie), key, page);",
+    "exploreUrl": "@js:WSLPA.explore.kinds(WSLPA.ctx(java, source, cache, cookie));",
+    "searchUrl": "@js:WSLPA.search.url(WSLPA.ctx(java, source, cache, cookie), key, page);",
     "ruleSearch": {
       "checkKeyWord": "剑来",
       "hasMoreRule": "WSLPA.search.hasMore(WSLPA.ctx(java, source, cache, cookie), result);",
@@ -70,7 +70,7 @@
       "imageStyle": "FULL"
     },
     "ruleReview": {
-      "reviewUrl": "@js:return WSLPA.review.url(WSLPA.ctx(java, source, cache, cookie), book, chapter, paragraphIndex, page);",
+      "reviewUrl": "@js:WSLPA.review.url(WSLPA.ctx(java, source, cache, cookie), book, chapter, paragraphIndex, page);",
       "reviewList": "<js>WSLPA.review.list(WSLPA.ctx(java, source, cache, cookie), result);</js>",
       "reviewIdRule": "<js>result.reviewId;</js>",
       "avatarRule": "<js>result.avatar;</js>",

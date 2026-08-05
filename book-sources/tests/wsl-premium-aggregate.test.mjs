@@ -430,6 +430,42 @@ test('发现栏目丢弃占位项、改写节点 origin 并复用书籍映射', 
   assert.equal(loaded.api.state.fromDataUri(loaded.context, books[0].bookUrl).bookId, 'DISCOVER_BOOK_ID');
 });
 
+test('Legado 顶层 @js 包装器可以作为 Rhino 脚本直接编译', async () => {
+  const sources = await jsonFile(outputFile);
+  const wrappers = sources.flatMap((source) => [
+    [`${source.bookSourceName}.loginUi`, source.loginUi],
+    [`${source.bookSourceName}.exploreUrl`, source.exploreUrl],
+    [`${source.bookSourceName}.searchUrl`, source.searchUrl],
+    [`${source.bookSourceName}.ruleReview.reviewUrl`, source.ruleReview.reviewUrl],
+  ]);
+
+  const style = await fixture('discover-style');
+  const loaded = await loadRuntime(['config.js', 'state.js', 'transport.js', 'search.js', 'explore.js']);
+  loaded.api.transport.read = () => ({ ok: true, data: style.data, raw: style });
+  const dynamicKinds = JSON.parse(loaded.api.explore.kinds(loaded.context))
+    .filter((item) => item.url);
+  for (const item of dynamicKinds) {
+    // 重要逻辑：button 会把完整 URL 直接交给 source.evalJS；普通项才会进入 AnalyzeUrl 解析 @js:。
+    assert.notEqual(item.type, 'button', `${item.title} 应走 openExplore/AnalyzeUrl`);
+  }
+  const dynamicUrls = dynamicKinds
+    .map((item, index) => [`动态发现链接[${index}]`, item.url]);
+  wrappers.push(...dynamicUrls);
+
+  for (const [label, wrapper] of wrappers) {
+    assert.match(wrapper, /^@js:/, label);
+    // 重要逻辑：Legado 会剥离 @js: 后直接交给 Rhino 编译，顶层 return 会触发“返回的值无效”。
+    assert.doesNotThrow(() => new vm.Script(wrapper.slice(4)), label);
+  }
+});
+
+test('Rhino 修复版递增更新时间以便 Legado 默认选中覆盖更新', async () => {
+  const sources = await jsonFile(outputFile);
+  const previousBrokenVersion = 1785772800000;
+  assert.ok(sources.every((source) => source.lastUpdateTime > previousBrokenVersion));
+  assert.equal(new Set(sources.map((source) => source.lastUpdateTime)).size, 1);
+});
+
 test('正文适配器分别输出文本、音频 URL、图片 HTML 和视频 URL', async () => {
   const names = { 小说: 'content-novel', 听书: 'content-audio', 漫画: 'content-image', 短剧: 'content-video' };
   for (const [tab, name] of Object.entries(names)) {
