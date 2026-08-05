@@ -53,7 +53,7 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
       // 单个上游栏目编码损坏时只丢弃该栏目，保留同一发现页中的其他有效入口。
       if (!query) return;
       var state = { v: 1, kind: 'discover', path: '/get_discover', query: query };
-      // 重要逻辑：只保存路径参数，服务端返回的节点 origin 不进入发现链接，打开时仍走统一故障切换。
+      // 重要逻辑：只保存路径参数，不持久化服务端 origin；打开时根据当前活动节点生成直接列表 URL，失败后需切换节点并刷新。
       var stateUrl = api.state.toDataUri(ctx, state);
       mapped.push({
         // 重要逻辑：普通发现分类沿用示例协议并省略 type；显式 text 在部分宿主版本中会被渲染为输入控件。
