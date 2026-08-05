@@ -13,9 +13,9 @@
     "loginCheckJs": null,
     "respondTime": 180000,
     "weight": 0,
-    "lastUpdateTime": 1785906400000,
+    "lastUpdateTime": 1785933394373,
     "variableComment": "在登录面板统一设置节点、发现频道、书架同步、评论和明文末级节点。",
-    "exploreUrl": "@js:WSLPA.explore.kinds(WSLPA.ctx(java, source, cache, cookie));/*发现榜单缓存-v3*/",
+    "exploreUrl": "@js:WSLPA.explore.kinds(WSLPA.ctx(java, source, cache, cookie));/*发现榜单缓存-v4*/",
     "searchUrl": "@js:WSLPA.search.url(WSLPA.ctx(java, source, cache, cookie), key, page);",
     "ruleSearch": {
       "checkKeyWord": "剑来",

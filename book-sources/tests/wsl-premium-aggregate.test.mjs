@@ -583,6 +583,11 @@ test('发现栏目返回活动节点 HTTPS 并在独立运行时解析原始响�
   // 重要逻辑：普通发现分类省略 type 才会由宿主作为可点击链接打开；text 会被部分版本渲染为输入框。
   assert.equal(Object.hasOwn(kinds[1], 'type'), false);
   assert.equal(kinds[1].style.cols, 4);
+  // 重要逻辑：同时保留官方 Flexbox 旧字段与本分支 GridLayout 新字段，避免旧宿主把按钮布局成零宽。
+  assert.equal(kinds[0].style.layout_flexGrow, 1);
+  assert.equal(kinds[0].style.layout_flexBasisPercent, 1);
+  assert.equal(kinds[1].style.layout_flexGrow, 1);
+  assert.equal(kinds[1].style.layout_flexBasisPercent, 0.25);
   assert.doesNotMatch(kinds[1].url, /v10\.czyl\.cf/);
 
   const encodedState = JSON.parse(kinds[1].url.match(/cookie\),\s*("(?:\\.|[^"\\])*")\s*,\s*page/)[1]);
@@ -605,6 +610,25 @@ test('发现栏目返回活动节点 HTTPS 并在独立运行时解析原始响�
   assert.equal(second.api.explore.hasMore(second.context, JSON.stringify(listing)), true);
   assert.equal(second.api.explore.hasMore(second.context, JSON.stringify({ ...listing, has_more: false })), false);
   assert.equal(Object.keys(second.api.responseStashes).length, 0);
+});
+
+test('发现栏目请求失败时仍返回本地基础榜单', async () => {
+  const loaded = await loadRuntime(['config.js', 'state.js', 'transport.js', 'search.js', 'explore.js']);
+  loaded.api.transport.read = () => { throw new Error('SYNTHETIC_DISCOVER_STYLE_FAILURE'); };
+
+  const kinds = JSON.parse(loaded.api.explore.kinds(loaded.context));
+  assert.deepEqual(kinds.slice(0, 4).map((kind) => kind.title), [
+    '排行榜', '推荐榜', '完本榜', '新书榜',
+  ]);
+  assert.ok(kinds.slice(1).every((kind) => kind.url.startsWith('@js:WSLPA.explore.url(')));
+
+  // 重要逻辑：回退榜单仍只保存结构化查询状态，点击时再绑定活动 HTTPS 节点和真实页码。
+  const encodedState = JSON.parse(kinds[1].url.match(/cookie\),\s*("(?:\\.|[^"\\])*")\s*,\s*page/)[1]);
+  const direct = new URL(loaded.api.explore.url(loaded.context, encodedState, 2));
+  assert.equal(direct.protocol, 'https:');
+  assert.equal(direct.pathname, '/get_discover');
+  assert.equal(direct.searchParams.get('bdtype'), '推荐榜');
+  assert.equal(direct.searchParams.get('page'), '2');
 });
 
 test('Legado 顶层 @js 包装器可以作为 Rhino 脚本直接编译', async () => {
@@ -638,10 +662,10 @@ test('Legado 顶层 @js 包装器可以作为 Rhino 脚本直接编译', async (
 
 test('列表直连修复版更换发现栏目缓存键并保持包装器返回值', async () => {
   const [source] = await jsonFile(outputFile);
-  const staleExploreUrl = '@js:WSLPA.explore.kinds(WSLPA.ctx(java, source, cache, cookie));/*发现榜单缓存-v2*/';
-  // 重要逻辑：Legado 用 bookSourceUrl + exploreUrl 缓存发现栏目；v3 强制丢弃仍会返回内存响应键的旧动态链接。
+  const staleExploreUrl = '@js:WSLPA.explore.kinds(WSLPA.ctx(java, source, cache, cookie));/*发现榜单缓存-v3*/';
+  // 重要逻辑：Legado 用 bookSourceUrl + exploreUrl 缓存发现栏目；v4 强制丢弃可能保存了空数组的旧动态结果。
   assert.notEqual(source.exploreUrl, staleExploreUrl);
-  assert.match(source.exploreUrl, /发现榜单缓存-v3/);
+  assert.match(source.exploreUrl, /发现榜单缓存-v4/);
 
   const style = await fixture('discover-style');
   const loaded = await loadRuntime(['config.js', 'state.js', 'transport.js', 'search.js', 'explore.js']);
