@@ -128,7 +128,9 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
   function booksValid(ctx, data) {
     if (!Array.isArray(data)) return false;
     return data.every(function (item) {
-      return object(item) && scalarId(item.book_id) && nonemptyString(item.source) && mediaMatches(ctx, item);
+      // 重要逻辑：搜索与发现共用同一条目契约，书名和来源都必须是非空字符串，避免生成空标题书籍。
+      return object(item) && scalarId(item.book_id) && nonemptyString(item.book_name) &&
+        nonemptyString(item.source) && mediaMatches(ctx, item);
     });
   }
   function schemaError(ctx, path, envelope) {

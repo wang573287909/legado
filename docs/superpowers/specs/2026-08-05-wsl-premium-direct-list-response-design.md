@@ -76,6 +76,7 @@
 ## 6. 错误处理
 
 - 服务器响应不是 JSON、缺少有效 `code`、`code != 0` 或书籍字段缺失时，`parseRead()` 抛出明确错误，不把损坏响应解析成空列表；连接错误由 Legado 报告；HTTP response 若进入规则，由严格 code/schema 决定，不声称 status 可见。
+- 搜索与发现共用书籍条目 schema；每个条目的 `book_name` 和 `source` 必须是 trim 后非空字符串，`book_id` 必须是有效标量。
 - `transport.url()` 拒绝绝对路径注入，只允许使用书源内声明的服务节点。
 - `hasMore` 优先使用服务器的布尔字段；字段缺失时，当页有书就允许请求下一页。
 - 空 `data` 是合法的到底页；字段结构损坏则是可见错误，两者不混同。

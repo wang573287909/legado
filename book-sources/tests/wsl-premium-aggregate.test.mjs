@@ -243,7 +243,9 @@ test('列表直连传输构造活动节点 URL 并校验宿主原始响应', asy
   assert.throws(() => api.transport.parseRead(context, '/search', '{"data":[]}'), /响应 code 无效/);
   // 端点校验继续拒绝与当前书源不一致的媒体类型。
   assert.throws(() => api.transport.parseRead(context, '/search', JSON.stringify({
-    code: 0, data: [{ book_id: 'BOOK_ID', source: 'SYNTHETIC_SOURCE', tab: '听书' }],
+    code: 0, data: [{
+      book_id: 'BOOK_ID', book_name: 'SYNTHETIC_BOOK', source: 'SYNTHETIC_SOURCE', tab: '听书',
+    }],
   })), /书籍列表字段无效/);
   assert.throws(() => api.transport.parseRead(context, '/search', JSON.stringify({
     code: -1, msg: 'SYNTHETIC_BUSINESS_ERROR', data: null,
@@ -260,22 +262,30 @@ test('列表直连拒绝强制转换型 code、书籍字段和分页字段', asy
     { label: 'hexadecimal string code', body: { code: '0x0', data: [] }, error: /响应 code 无效/ },
     {
       label: 'boolean book id',
-      body: { code: 0, data: [{ book_id: false, source: 'SYNTHETIC_SOURCE', tab: '小说' }] },
+      body: { code: 0, data: [{
+        book_id: false, book_name: 'SYNTHETIC_BOOK', source: 'SYNTHETIC_SOURCE', tab: '小说',
+      }] },
       error: /书籍列表字段无效/,
     },
     {
       label: 'object book id',
-      body: { code: 0, data: [{ book_id: {}, source: 'SYNTHETIC_SOURCE', tab: '小说' }] },
+      body: { code: 0, data: [{
+        book_id: {}, book_name: 'SYNTHETIC_BOOK', source: 'SYNTHETIC_SOURCE', tab: '小说',
+      }] },
       error: /书籍列表字段无效/,
     },
     {
       label: 'object source',
-      body: { code: 0, data: [{ book_id: 'BOOK_ID', source: {}, tab: '小说' }] },
+      body: { code: 0, data: [{
+        book_id: 'BOOK_ID', book_name: 'SYNTHETIC_BOOK', source: {}, tab: '小说',
+      }] },
       error: /书籍列表字段无效/,
     },
     {
       label: 'boolean tab',
-      body: { code: 0, data: [{ book_id: 'BOOK_ID', source: 'SYNTHETIC_SOURCE', tab: false }] },
+      body: { code: 0, data: [{
+        book_id: 'BOOK_ID', book_name: 'SYNTHETIC_BOOK', source: 'SYNTHETIC_SOURCE', tab: false,
+      }] },
       error: /书籍列表字段无效/,
     },
     { label: 'object has more', body: { code: 0, data: [], has_more: {} }, error: /书籍列表字段无效/ },
@@ -291,11 +301,45 @@ test('列表直连拒绝强制转换型 code、书籍字段和分页字段', asy
   )), empty);
   const numericBookId = {
     code: 0,
-    data: [{ book_id: 123, source: 'SYNTHETIC_SOURCE', tab: '小说' }],
+    data: [{
+      book_id: 123, book_name: 'SYNTHETIC_BOOK', source: 'SYNTHETIC_SOURCE', tab: '小说',
+    }],
   };
   assert.deepEqual(JSON.parse(JSON.stringify(
     api.transport.parseRead(context, '/search', JSON.stringify(numericBookId)),
   )), numericBookId);
+});
+
+test('列表直连要求搜索和发现书籍包含非空字符串书名', async () => {
+  const { api, context } = await loadRuntime(['config.js', 'state.js', 'transport.js']);
+  const endpoints = ['/search', '/get_discover'];
+  const invalidNames = [
+    { label: 'missing book_name', present: false },
+    { label: 'blank book_name', present: true, value: ' \t ' },
+    { label: 'non-string book_name', present: true, value: {} },
+  ];
+
+  endpoints.forEach((endpoint) => {
+    invalidNames.forEach(({ label, present, value }) => {
+      const item = { book_id: 'BOOK_ID', source: 'SYNTHETIC_SOURCE', tab: '小说' };
+      if (present) item.book_name = value;
+      assert.throws(() => api.transport.parseRead(context, endpoint, JSON.stringify({
+        code: 0, data: [item], has_more: false,
+      })), /书籍列表字段无效/, `${endpoint}: ${label}`);
+    });
+
+    const valid = {
+      code: 0,
+      data: [{
+        book_id: 'BOOK_ID', book_name: ' SYNTHETIC_BOOK ',
+        source: 'SYNTHETIC_SOURCE', tab: '小说',
+      }],
+      has_more: false,
+    };
+    assert.deepEqual(JSON.parse(JSON.stringify(
+      api.transport.parseRead(context, endpoint, JSON.stringify(valid)),
+    )), valid, `${endpoint}: nonempty book_name`);
+  });
 });
 
 test('只读传输在 5xx 后切换并粘住成功节点', async () => {
@@ -306,7 +350,7 @@ test('只读传输在 5xx 后切换并粘住成功节点', async () => {
     if (String(spec).includes('/detail')) {
       return response(200, '{"code":0,"msg":"ok","data":{"book_id":"BOOK_ID","source":"SYNTHETIC_SOURCE","book_name":"SYNTHETIC_BOOK","tab":"小说"}}');
     }
-    return response(200, '{"code":0,"msg":"ok","data":[{"book_id":"BOOK_ID","source":"SYNTHETIC_SOURCE","tab":"小说"}]}');
+    return response(200, '{"code":0,"msg":"ok","data":[{"book_id":"BOOK_ID","book_name":"SYNTHETIC_BOOK","source":"SYNTHETIC_SOURCE","tab":"小说"}]}');
   });
   const { api, cache, context } = await loadRuntime(['config.js', 'state.js', 'transport.js'], { java });
   const result = api.transport.read(context, '/search', { title: 'SYNTHETIC' });
@@ -367,9 +411,9 @@ test('损坏信封、缺失数据和媒体错配在候选循环内触发只读�
       second: '{"code":0,"data":{"book_id":"BOOK_ID","source":"SYNTHETIC_SOURCE","book_name":"SYNTHETIC_BOOK","tab":"小说"}}',
     },
     {
-      first: '{"code":0,"data":[{"book_id":"BOOK_ID","source":"SYNTHETIC_SOURCE","tab":"听书"}]}',
+      first: '{"code":0,"data":[{"book_id":"BOOK_ID","book_name":"SYNTHETIC_BOOK","source":"SYNTHETIC_SOURCE","tab":"听书"}]}',
       pathName: '/search',
-      second: '{"code":0,"data":[{"book_id":"BOOK_ID","source":"SYNTHETIC_SOURCE","tab":"小说"}]}',
+      second: '{"code":0,"data":[{"book_id":"BOOK_ID","book_name":"SYNTHETIC_BOOK","source":"SYNTHETIC_SOURCE","tab":"小说"}]}',
     },
   ];
   for (const scenario of scenarios) {

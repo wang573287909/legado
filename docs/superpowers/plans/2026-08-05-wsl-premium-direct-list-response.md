@@ -204,6 +204,8 @@ Expected: FAIL，错误包含 `api.transport.url is not a function`。
   };
 ```
 
+搜索与发现共用的 `booksValid()` 同时要求每个列表条目的 `book_name` 和 `source` 为 trim 后非空字符串，避免无标题书籍进入列表映射。
+
 - [ ] **Step 4: 运行传输测试并确认通过**
 
 Run:
