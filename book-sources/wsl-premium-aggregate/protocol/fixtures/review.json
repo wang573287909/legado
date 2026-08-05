@@ -1,0 +1,1 @@
+{"code":0,"msg":"ok","data":{"comments":[{"comment_id":"COMMENT_ID","content":"SYNTHETIC_REVIEW","image_url":"https://media.invalid/review.jpg","like_count":3,"reply_count":1,"create_time":"2026-08-04","user":{"user_id":"USER_ID","user_name":"SYNTHETIC_READER","user_avatar":"https://media.invalid/avatar.jpg"}}],"total":1,"has_more":false,"next_cursor":"0"}}
