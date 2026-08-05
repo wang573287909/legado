@@ -417,6 +417,8 @@ test('发现栏目丢弃占位项、改写节点 origin 并复用书籍映射', 
   const kinds = JSON.parse(loaded.api.explore.kinds(loaded.context));
   assert.deepEqual(kinds.map((kind) => kind.title), ['排行榜', '推荐榜']);
   assert.equal(kinds[0].type, 'title');
+  // 重要逻辑：普通发现分类沿用示例协议，省略 type 后由宿主按可点击链接处理；text 在部分版本会打开输入控件。
+  assert.equal(Object.hasOwn(kinds[1], 'type'), false);
   assert.equal(kinds[1].style.cols, 4);
   assert.doesNotMatch(kinds[1].url, /v10\.czyl\.cf/);
 
@@ -459,10 +461,10 @@ test('Legado 顶层 @js 包装器可以作为 Rhino 脚本直接编译', async (
   }
 });
 
-test('Rhino 修复版递增更新时间以便 Legado 默认选中覆盖更新', async () => {
+test('榜单控件修复版递增更新时间以便 Legado 默认选中覆盖更新', async () => {
   const sources = await jsonFile(outputFile);
-  const previousBrokenVersion = 1785772800000;
-  assert.ok(sources.every((source) => source.lastUpdateTime > previousBrokenVersion));
+  const previousTextControlVersion = 1785891600000;
+  assert.ok(sources.every((source) => source.lastUpdateTime > previousTextControlVersion));
   assert.equal(new Set(sources.map((source) => source.lastUpdateTime)).size, 1);
 });
 

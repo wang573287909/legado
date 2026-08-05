@@ -56,8 +56,8 @@ var WSLPA = typeof WSLPA === 'object' && WSLPA ? WSLPA : {};
       // 重要逻辑：只保存路径参数，服务端返回的节点 origin 不进入发现链接，打开时仍走统一故障切换。
       var stateUrl = api.state.toDataUri(ctx, state);
       mapped.push({
-        // 重要逻辑：text 项进入 openExplore/AnalyzeUrl，由宿主剥离 @js:；button 会把整串直接交给 evalJS。
-        title: title, type: 'text',
+        // 重要逻辑：普通发现分类沿用示例协议并省略 type；显式 text 在部分宿主版本中会被渲染为输入控件。
+        title: title,
         url: '@js:WSLPA.explore.url(WSLPA.ctx(java, source, cache, cookie), ' + JSON.stringify(stateUrl) + ', page);',
         style: { cols: cols(item.style) }
       });

@@ -13,7 +13,7 @@
     "loginCheckJs": null,
     "respondTime": 180000,
     "weight": 0,
-    "lastUpdateTime": 1785891600000,
+    "lastUpdateTime": 1785899166250,
     "variableComment": "在登录面板统一设置节点、发现频道、书架同步、评论和明文末级节点。",
     "exploreUrl": "@js:WSLPA.explore.kinds(WSLPA.ctx(java, source, cache, cookie));",
     "searchUrl": "@js:WSLPA.search.url(WSLPA.ctx(java, source, cache, cookie), key, page);",
